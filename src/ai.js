@@ -17,14 +17,16 @@ const AI_T={
   vlan:{body:'viper',prop:'vtol',weapon:'lancer'},
   flc:{body:'cobra',prop:'half',weapon:'flamer'},
   lasm:{body:'mantis',prop:'tracks',weapon:'laser'},
-  canm:{body:'mantis',prop:'tracks',weapon:'cannon'}
+  canm:{body:'mantis',prop:'tracks',weapon:'cannon'},
+  cmd:{body:'cobra',prop:'half',weapon:'command'},
+  cybm:{body:'cyborg',prop:'legs',weapon:'mg'},cybl:{body:'cyborg',prop:'legs',weapon:'lancer'},cybf:{body:'cyborg',prop:'legs',weapon:'flamer'},cybh:{body:'cyborg',prop:'legs',weapon:'cannon'}
 };
-const AI_RESEARCH=['mg','tracks','lancer','flamer','hardpoint','python','cannon','mortar','armor','aa','repairfac','rocket','mantis','oil','engine','laser','optics','howitzer','hover','vtol','ripple'];
+const AI_RESEARCH=['mg','tracks','lancer','flamer','hardpoint','python','cannon','mortar','armor','aa','repairfac','rocket','mantis','oil','engine','laser','optics','howitzer','hover','vtol','ripple','command','lassat'];
 function newAI(o){o=o||{};return{t:2+R()*2,time:0,wave:0,size:o.size||6,maxSize:o.maxSize||22,next:o.first||220,gap:o.gap||140,inc:o.inc||1,mode:o.mode||'base',
   base:o.base||3,grow:o.grow||1.3,harass:o.harass??true,squads:[],pool:o.pool||null,waveT:o.first||40,research:o.research||AI_RESEARCH}}
 const foesOf=T=>ents.filter(e=>e.hp>0&&!e.stranded&&hostile(T,e.team));
 function aiPickUnit(ai,T,ctx){
-  const W={mgv:ai.wave<2?3:.6,mgc:2,can:2,canp:3,lan:2,lanp:3,mor:1.1,hov:1,rep:ctx.army>5?.8:0,aa:ctx.foeAir?2.5:0,vbomb:ctx.pads?1.6:0,vlan:ctx.pads?1:0,flc:1.2,lasm:3,canm:2.5};
+  const W={mgv:ai.wave<2?3:.6,mgc:2,can:2,canp:3,lan:2,lanp:3,mor:1.1,hov:1,rep:ctx.army>5?.8:0,aa:ctx.foeAir?2.5:0,vbomb:ctx.pads?1.6:0,vlan:ctx.pads?1:0,flc:1.2,lasm:3,canm:2.5,cmd:ctx.army>8&&!ctx.cmds?.6:0};
   let tot=0;const c=[];for(const k in W)if(W[k]>0&&designOk(T,AI_T[k])){c.push([k,W[k]]);tot+=W[k]}
   let x=R()*tot;for(const[k,w]of c){x-=w;if(x<=0)return AI_T[k]}return AI_T.mgv}
 function findSpot(type,cx,cy){
@@ -34,7 +36,7 @@ function aiThink(T){
   const ai=ais[T],hq=findHQ(T);if(!hq)return;
   const mine=ents.filter(e=>e.team===T&&e.hp>0),trucks=mine.filter(isTruck),units=mine.filter(e=>e.kind==='u'&&!isTruck(e)&&!e.guard);
   const army=units.filter(e=>!isAir(e)),air=units.filter(isAir),foes=foesOf(T);
-  const facs=mine.filter(e=>e.type==='factory'),unf=mine.filter(e=>e.kind==='b'&&e.built<1);
+  const facs=mine.filter(e=>e.type==='factory'||e.type==='cyborgFactory'),unf=mine.filter(e=>e.kind==='b'&&e.built<1);
   const cnt=t=>mine.filter(e=>e.type===t).length,pw=()=>power[T];
   const foeAir=foes.some(isAir);
   const hx=hq.tx+1,hy=hq.ty+1,toward=[hx+Math.sign(MW/2-hx)*6,hy+Math.sign(MH/2-hy)*6];
@@ -49,7 +51,9 @@ function aiThink(T){
     if(free.length&&pw()>=50&&dist(free[0],hq)<reach)b=placeBuilding('derrick',T,free[0].tx,free[0].ty);
     else if(ai.time>80&&cnt('research')===0)b=tryBuild('research',hx,hy);
     else if(ai.time>150&&cnt('sensorTower')===0&&pw()>=200)b=tryBuild('sensorTower',toward[0],toward[1]);
-    else if(ai.time>200&&facs.length<(pw()>800?3:2)&&pw()>=320)b=tryBuild('factory',hx,hy);
+    else if(ai.time>140&&cnt('cyborgFactory')===0&&pw()>=260)b=tryBuild('cyborgFactory',hx,hy);
+    else if(has(T,'lassat')&&cnt('lassat')===0&&pw()>=1500)b=tryBuild('lassat',hx,hy);
+    else if(ai.time>200&&facs.filter(f=>f.type==='factory').length<(pw()>800?3:2)&&pw()>=320)b=tryBuild('factory',hx,hy);
     else if(foeAir&&cnt('aaSite')<3)b=tryBuild('aaSite',hx,hy);
     else if(has(T,'vtol')&&cnt('vtolPad')<2&&pw()>=250)b=tryBuild('vtolPad',hx-Math.sign(MW/2-hx)*3,hy);
     else if(has(T,'repairfac')&&cnt('repairFac')===0&&pw()>=300)b=tryBuild('repairFac',hx,hy);
@@ -60,7 +64,8 @@ function aiThink(T){
     if(b){orderBuild(t,b);unf.push(b)}}
   for(const f of facs){if(f.built<1||f.queue.length>=2)continue;
     const qt=facs.reduce((s,x)=>s+x.queue.filter(q=>q.weapon==='construct').length,0);
-    const d=trucks.length+qt<3?AI_T.truck:aiPickUnit(ai,T,{army:army.length,foeAir,pads:cnt('vtolPad')});
+    const cyb=['cybm','cybl','cybf','cybh'].filter(k=>designOk(T,AI_T[k]));
+    const d=f.type==='cyborgFactory'?AI_T[cyb[Math.floor(R()*cyb.length)]||'cybm']:trucks.length+qt<3?AI_T.truck:aiPickUnit(ai,T,{army:army.length,foeAir,pads:cnt('vtolPad'),cmds:mine.some(e=>e.kind==='u'&&e.st.util==='commander')});
     const reserve=(cnt('research')===0&&ai.time>60?160:0)+(free.length&&trucks.length?60:0),c=calcStats(d).cost;if(pw()>=c+(d===AI_T.truck?0:reserve)){power[T]-=c;f.queue.push({...d})}}
   for(const r of mine.filter(e=>e.type==='research'&&e.built>=1&&!e.res)){
     const n=RESEARCH.find(x=>ai.research.includes(x.id)&&!has(T,x.id)&&(!x.req||has(T,x.req))&&!mine.some(m=>m.res&&m.res.id===x.id));
@@ -114,6 +119,11 @@ function aiThink(T){
       else for(const u of us)if(!u.order)orderMove(u,tt.x+(R()-.5)*80,tt.y+(R()-.5)*80,'amove')}
     else if(s.t>35||us.every(u=>dist(u,hq)<500))s.u=[]}
   ai.squads=ai.squads.filter(s=>s.u.length);
+  // fire the laser satellite at the densest enemy spot we can find
+  const up=mine.find(e=>e.type==='lassat'&&e.built>=1&&(e.charge||0)>=LASSAT_CHARGE);
+  if(up&&fb.length){let best=null,bs=0;for(const b of fb){const n=foes.filter(e=>Math.hypot(e.x-b.x,e.y-b.y)<220).length+(b.type==='hq'?4:0);if(n>bs){bs=n;best=b}}if(best)fireLassat(up,best.x,best.y)}
+  // grab oil drums and artifacts near our units
+  for(const p of pickups){let best=null,bd=500;for(const a of idle){const d=Math.hypot(a.x-p.x,a.y-p.y);if(d<bd){bd=d;best=a}}if(best&&!best.order)orderMove(best,p.x,p.y)}
   for(const a of air)if(!a.order&&!a.rearming&&ai.wave>0&&R()<.2){const pb=foes.filter(e=>canHit(a,e));if(pb.length)a.order={t:'attack',id:pb[Math.floor(R()*pb.length)].id}}
   ai.time+=1;
 }

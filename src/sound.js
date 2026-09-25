@@ -20,6 +20,7 @@ function sfx(n,x,y){if(!SFX.ctx||!SFX.on)return;const c=SFX.ctx,t=c.currentTime;
   case 'flak':nz(t,.12,'bandpass',900,400,1.2,.5*v);tn(t,.08,'square',120,60,.1*v);break;
   case 'shell':nz(t,1.2,'lowpass',1400,60,.7,1.2*v);tn(t,.9,'sine',70,25,1*v);break;
   case 'ripple':for(let i=0;i<6;i++)nz(t+i*.09,.6,'bandpass',600,2600,1.6,.4*v);break;
+  case 'lassat':nz(t,2.5,'lowpass',3000,40,.5,1.6);tn(t,1.5,'sawtooth',900,60,.3);tn(t,2.5,'sine',60,20,1);break;
   case 'flame':nz(t,.25,'lowpass',900,300,.6,.4*v);break;
   case 'laser':tn(t,.18,'sawtooth',1800,300,.12*v);tn(t,.12,'sine',2400,900,.1*v);break;
   case 'bomb':tn(t,.6,'sine',1400,500,.08*v);break;

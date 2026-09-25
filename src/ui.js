@@ -2,8 +2,8 @@
 // UI: HUD, unit designer, menus, input, save/load and game flow
 // =====================================================================
 const mouse={x:0,y:0,in:false,world:null},keys={};let drag=null,rot=null,lastClick={t:0,key:null},lastGroupKey={k:null,t:0};
-let inGameMenu=false,menuPrevPause=false,sk={map:'desert',size:64,ais:1,mode:'vs',diff:'normal',weather:'clear',allies:[false,false,false]};
-function uiOpen(){return !$('designer').hidden||!$('editor').hidden||$('overlay').style.display!=='none'}
+let autoT=0,inGameMenu=false,menuPrevPause=false,sk={map:'desert',size:64,ais:1,mode:'vs',diff:'normal',weather:'clear',allies:[false,false,false]};
+function uiOpen(){return !$('designer').hidden||!$('techtree').hidden||!$('editor').hidden||$('overlay').style.display!=='none'}
 function lsGet(k){try{return localStorage.getItem(k)}catch(e){return null}}
 function lsSet(k,v){try{localStorage.setItem(k,v);return true}catch(e){return false}}
 function showMenu(html){$('obox').innerHTML=html;$('overlay').style.display='flex'}
@@ -12,9 +12,10 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',
 
 // ---------- HUD ----------
 let panelKey='',refs=[];
-function mkBtn(label,cost,img,tip,onL,onR){
-  const b=document.createElement('div');b.className='btn';b.title=tip;
-  b.innerHTML=`${img?`<img src="${img}" alt="">`:''}<div>${esc(label)}</div>${cost!==''?`<div class="cost">⚡${cost}</div>`:''}<div class="q"></div><div class="prog"></div>`;
+const HOTKEYS={factory:'F',cyborgFactory:'C',research:'R',derrick:'O',wall:'L',sensorTower:'Y',tower:'T',bunker:'B',hardpoint:'J',mortarPit:'K',aaSite:'I',repairFac:'N',vtolPad:'V'};
+function mkBtn(label,cost,img,tip,onL,onR,hk){
+  const b=document.createElement('div');b.className='btn';b.title=tip+(hk?' (hotkey '+hk+')':'');
+  b.innerHTML=`${hk?`<span class="hk">${hk}</span>`:''}${img?`<img src="${img}" alt="">`:''}<div>${esc(label)}</div>${cost!==''?`<div class="cost">⚡${cost}</div>`:''}<div class="q"></div><div class="prog"></div>`;
   b.addEventListener('mousedown',e=>{e.preventDefault();e.stopPropagation();if(e.button===0)onL(e);else if(e.button===2&&onR)onR(e)});
   b.addEventListener('contextmenu',e=>e.preventDefault());
   $('buttons').appendChild(b);return b}
@@ -27,18 +28,25 @@ function rebuildPanel(){
   const own=sel.filter(e=>e.team===0);
   if(!sel.length){$('selTitle').textContent='Nothing selected. Drag a box around your units or click a building.';return}
   if(own.some(isTruck))for(const t of BUILD_LIST){const d=BDEF[t];if(!avail(0,d))continue;
-    const b=mkBtn(d.name,d.cost,thumbB(t),d.desc,()=>{placing={type:t};if(t==='derrick')msg('Click on a burning oil resource to build a derrick',2);if(t==='wall')msg('Click and drag to build a line of walls',2)});
+    const b=mkBtn(d.name,d.cost,thumbB(t),d.desc,()=>{placing={type:t};if(t==='derrick')msg('Click on a burning oil resource to build a derrick',2);if(t==='wall')msg('Click and drag to build a line of walls',2)},null,HOTKEYS[t]);
     refs.push(()=>b.classList.toggle('dis',power[0]<d.cost))}
   if(own.some(e=>e.kind==='u'&&e.st.util==='transport'))mkBtn('Unload','',textIcon('⇩','#6cf'),'Drop off all carried units below the transport (U)',unloadSel);
+  const fighters=own.filter(e=>e.kind==='u'&&!e.st.util);
+  if(fighters.length){const cur=fighters.every(u=>(u.stance||'aggressive')===fighters[0].stance||(!u.stance&&!fighters[0].stance))?(fighters[0].stance||'aggressive'):'';
+    for(const[s,label,ic,tip]of[['aggressive','Aggressive','A','Chase and attack enemies nearby'],['hold','Hold position','H','Stay put and only shoot what is in range'],['passive','Passive','P','Never fire unless ordered to attack']]){
+      const b=mkBtn(label,'',textIcon(ic,'#ffb86b'),tip,()=>{for(const u of fighters)u.stance=s;panelKey='';sfx('click')});if(cur===s)b.classList.add('on')}}
+  if(own.some(e=>e.kind==='u'))mkBtn('Patrol','',textIcon('↔','#6cf'),'Click a point: units patrol between here and there (X). Shift+right-click adds waypoints.',()=>{placing={type:'patrol'};msg('Click where the units should patrol to',2)},null,'X');
   if(own.length===1&&own[0].kind==='b'){const f=own[0];
-    if(f.built>=1&&f.type==='factory'){
-      for(const tp of templates[0]){if(!designOk(0,tp))continue;const st=calcStats(tp),key=dkey(tp);
+    if(f.built>=1&&f.type==='lassat'){const b=mkBtn('Fire Laser Satellite','',textIcon('✦','#ff6b6b'),'Strike any spot on the map',()=>{if((f.charge||0)<LASSAT_CHARGE)return deny('The satellite is still charging');placing={type:'lassat',id:f.id};msg('Click anywhere on the map to fire',3)});
+      refs.push(()=>{b.querySelector('.prog').style.width=((f.charge||0)/LASSAT_CHARGE*100)+'%';b.classList.toggle('dis',(f.charge||0)<LASSAT_CHARGE);b.querySelector('.q').textContent=(f.charge||0)<LASSAT_CHARGE?fmtTime(LASSAT_CHARGE-(f.charge||0)):'READY'})}
+    if(f.built>=1&&(f.type==='factory'||f.type==='cyborgFactory')){
+      for(const tp of f.type==='cyborgFactory'?CYBORG_TPL:templates[0].filter(t=>t.prop!=='legs')){if(!designOk(0,tp))continue;const st=calcStats(tp),key=dkey(tp);
         const b=mkBtn(tp.name,st.cost,thumbUnit(tp),st.name+'. HP '+st.hp+'. Left-click: build. Right-click: cancel.',
           ()=>{if(f.queue.length>=8)return deny('Queue is full');if(power[0]<st.cost)return deny('Not enough power!');power[0]-=st.cost;f.queue.push({body:tp.body,prop:tp.prop,weapon:tp.weapon,name:tp.name});sfx('click')},
           ()=>{let i=-1;f.queue.forEach((q,j)=>{if(dkey(q)===key)i=j});if(i>=0){f.queue.splice(i,1);power[0]+=st.cost;if(i===0)f.prog=0}});
         refs.push(()=>{const n=f.queue.filter(q=>dkey(q)===key).length;b.querySelector('.q').textContent=n?n:'';b.querySelector('.prog').style.width=f.queue[0]&&dkey(f.queue[0])===key?(f.prog/st.time*100)+'%':'0';b.classList.toggle('dis',power[0]<st.cost)})}
-      mkBtn('Design new unit','',textIcon('+','#ffe066'),'Open the unit designer',openDesigner)}
-    if(f.built>=1&&f.type==='research'){const list=RESEARCH.filter(r=>researchAllowed(0,r));
+      if(f.type==='factory')mkBtn('Design new unit','',textIcon('+','#ffe066'),'Open the unit designer',openDesigner)}
+    if(f.built>=1&&f.type==='research'){const list=RESEARCH.filter(r=>researchAllowed(0,r));mkBtn('Research tree','',textIcon('⌘','#9f9'),'See the whole research tree',openTree);
       if(!list.length)$('buttons').insertAdjacentHTML('beforeend','<div class="note">All available research is complete.</div>');
       for(const r of list){
         const b=mkBtn(r.name,r.cost,textIcon('R','#5cf'),r.desc,
@@ -52,12 +60,14 @@ function rebuildPanel(){
       if(e.kind==='b'&&e.built<1)t+='  (under construction '+Math.floor(e.built*100)+'%)';
       if(e.kind==='u'&&e.st.util==='transport')t+='  ·  Cargo '+cargoOf(e).length+'/'+e.st.w.cap+'. Right-click it with units to board, U to unload';
       if(e.type==='derrick'&&e.built>=1)t+='  (+'+(2.6*(tech[e.team].oil?1.5:1)).toFixed(1)+' power/s)';
-      if(e.team===0&&e.type==='factory'&&e.built>=1)t+='  ·  Right-click the map to set a rally point'}
+      if(e.kind==='u'&&e.st.util==='commander')t+='  ·  Followers '+ents.filter(f=>f.cmd===e.id&&f.hp>0).length+'. Right-click it with units to make them follow';
+      if(e.kind==='u'&&e.cmd&&alive(byId.get(e.cmd)))t+='  ·  Following a Commander';
+      if(e.team===0&&(e.type==='factory'||e.type==='cyborgFactory')&&e.built>=1)t+='  ·  Right-click the map to set a rally point'}
     else{const c={};for(const e of sel){const n=unitLabel(e);c[n]=(c[n]||0)+1}t=sel.length+' selected: '+Object.entries(c).map(([k,v])=>v+'× '+k).join(', ')}
     $('selTitle').textContent=t});
 }
 function updateHud(){
-  const key=sel.map(e=>e.id+':'+(e.built>=1?1:0)).join(',')+'|'+Object.keys(tech[0]).join()+'|'+templates[0].map(dkey).join();
+  const key=sel.map(e=>e.id+':'+(e.built>=1?1:0)+(e.stance||'')).join(',')+'|'+Object.keys(tech[0]).join()+'|'+templates[0].map(dkey).join();
   if(key!==panelKey){panelKey=key;rebuildPanel()}
   for(const f of refs)f();
   $('power').textContent=Math.floor(power[0]);$('pbar').firstChild.style.width=Math.min(100,power[0]/20)+'%';
@@ -71,7 +81,7 @@ function openDesigner(){if(state!=='play')return;$('designer').hidden=false;dPre
 function closeDesigner(){$('designer').hidden=true;paused=dPrev;panelKey=''}
 function reqText(c){return c.req?'Requires research: '+RESEARCH.find(r=>r.id===c.req).name:''}
 function chipRow(el,defs,part){const boxEl=$(el);boxEl.innerHTML='';
-  for(const k in defs){if(defs[k].structOnly)continue;const c=defs[k],ok=avail(0,c),b=document.createElement('button');b.type='button';b.className='chip'+(dz[part]===k?' on':'');b.disabled=!ok;b.title=ok?c.desc:reqText(c);
+  for(const k in defs){if(defs[k].structOnly||defs[k].cyborg)continue;const c=defs[k],ok=avail(0,c),b=document.createElement('button');b.type='button';b.className='chip'+(dz[part]===k?' on':'');b.disabled=!ok;b.title=ok?c.desc:reqText(c);
     b.innerHTML=esc(c.name)+'<small>'+(ok?'⚡'+c.cost:'Locked')+'</small>';b.onclick=()=>{dz[part]=k;sfx('click');renderDesigner()};boxEl.appendChild(b)}}
 function renderDesigner(){
   chipRow('dBody',BODIES,'body');chipRow('dProp',PROPS,'prop');chipRow('dWeap',WEAPONS,'weapon');
@@ -90,7 +100,29 @@ function renderDesigner(){
 }
 $('dSave').onclick=()=>{if($('dSave').disabled)return;templates[0].push({...dz,name:calcStats(dz).name});sfx('complete');msg('Design saved. Build it from your Factory.',2.5);renderDesigner()};
 $('dClose').onclick=closeDesigner;
-$('bDesign').onclick=openDesigner;$('bMenu').onclick=()=>openGameMenu();$('snd').onclick=toggleSound;
+$('bDesign').onclick=openDesigner;$('bTech').onclick=()=>openTree();$('bMenu').onclick=()=>openGameMenu();$('snd').onclick=toggleSound;
+
+// ---------- RESEARCH TREE ----------
+let tPrev=false;
+function techDepth(r){let d=0,x=r;while(x.req){x=RESEARCH.find(q=>q.id===x.req);d++}return d}
+function techUnlocks(id){const out=[];for(const v of Object.values(BODIES))if(v.req===id)out.push(v.name+' body');for(const v of Object.values(PROPS))if(v.req===id)out.push(v.name);
+  for(const v of Object.values(WEAPONS))if(v.req===id&&!v.structOnly)out.push(v.name);for(const v of Object.values(BDEF))if(v.req===id)out.push(v.name);return out}
+function openTree(){if(state!=='play')return;$('techtree').hidden=false;tPrev=paused;paused=true;renderTree()}
+function closeTree(){$('techtree').hidden=true;paused=tPrev}
+function techStatus(r){if(tech[0][r.id])return['done','Researched'];if(ents.some(e=>e.team===0&&e.res&&e.res.id===r.id))return['busy','Researching…'];
+  if(r.req&&!tech[0][r.req])return['locked','Needs '+RESEARCH.find(q=>q.id===r.req).name];if(!researchAllowed(0,r))return['na','Not in this mission'];return['avail','Click to research']}
+function renderTree(){
+  const cols=[];for(const r of RESEARCH){const d=techDepth(r);(cols[d]=cols[d]||[]).push(r)}
+  const CW=214,CH=92,NW=184,NH=78,pos={};cols.forEach((c,i)=>c.forEach((r,j)=>pos[r.id]={x:12+i*CW,y:10+j*CH}));
+  const Wd=12+cols.length*CW,Ht=10+Math.max(...cols.map(c=>c.length))*CH;
+  const lines=RESEARCH.filter(r=>r.req).map(r=>{const a=pos[r.req],b=pos[r.id],y1=a.y+NH/2,y2=b.y+NH/2;return `<path class="${tech[0][r.req]?'on':''}" d="M${a.x+NW} ${y1} C${a.x+NW+22} ${y1},${b.x-22} ${y2},${b.x} ${y2}"/>`}).join('');
+  const nodes=RESEARCH.map(r=>{const[st,label]=techStatus(r),un=techUnlocks(r.id),p=pos[r.id];
+    return `<button type="button" class="tnode ${st}" style="left:${p.x}px;top:${p.y}px" onclick="treeClick('${r.id}')" title="${esc(r.desc)}"><b>${esc(r.name)}</b><small>⚡${r.cost} · ${esc(label)}</small><span>${esc(un.length?'Unlocks: '+un.join(', '):r.desc)}</span></button>`}).join('');
+  $('tTree').innerHTML=`<div class="tcanvas" style="width:${Wd}px;height:${Ht}px"><svg width="${Wd}" height="${Ht}" aria-hidden="true">${lines}</svg>${nodes}</div>`}
+function treeClick(id){const r=RESEARCH.find(x=>x.id===id);if(techStatus(r)[0]!=='avail')return;
+  const f=ents.find(e=>e.team===0&&e.type==='research'&&e.built>=1&&!e.res);if(!f)return deny('Every Research Facility is busy, or you have none');
+  if(power[0]<r.cost)return deny('Not enough power!');power[0]-=r.cost;f.res={id:r.id,prog:0};sfx('click');renderTree()}
+$('tClose').onclick=closeTree;
 
 // ---------- MENUS ----------
 function progress(){return +(lsGet('if_progress')||0)}
@@ -131,6 +163,12 @@ function helpMenu(){showMenu(`<h1>HOW TO PLAY</h1><ul>
   <li><b>Groups:</b> Ctrl + 1-9 (or Shift + 1-9) saves a group. Press the number to select it, twice to jump to it.</li>
   <li><b>Transport:</b> right-click a Transport with ground units to board, then fly it and press U to unload.</li>
   <li><b>Radar:</b> Radar Towers and Radar Turrets see far. Mortars fire at everything they spot.</li>
+  <li><b>Cyborgs</b> are built in a Cyborg Factory. <b>Commanders</b> boost nearby units; right-click one with units to make them follow.</li>
+  <li><b>Stances:</b> Aggressive, Hold position or Passive. <b>Patrol</b> with X, and Shift+right-click to add waypoints.</li>
+  <li><b>Build hotkeys</b> with trucks selected: F factory, C cyborg factory, R research, O oil derrick, L wall, T tower, Y radar and more (see the buttons).</li>
+  <li><b>Pick up</b> oil drums for power and artifacts from destroyed enemy factories and labs for free technology.</li>
+  <li><b>Laser Satellite:</b> research it late, build the uplink, and strike anywhere every 5 minutes.</li>
+  <li><b>Saving:</b> F5 quicksave, F9 quickload, and the game autosaves every 3 minutes.</li>
   <li><b>Keys:</b> H = base, G = select army, P = pause, M = sound, Esc = menu.</li></ul>
   <button class="big" onclick="mainMenu()">Back</button>`)}
 function openGameMenu(){if(state!=='play'||inGameMenu)return;if(!$('designer').hidden)closeDesigner();inGameMenu=true;menuPrevPause=paused;paused=true;
@@ -140,9 +178,10 @@ function resumeGame(){inGameMenu=false;paused=menuPrevPause;hideMenu()}
 function restartGame(){if(game.mode==='campaign')startMission(game.mission);else newSkirmish(game.sk||sk)}
 function slotsMenu(mode){
   const back=inGameMenu?'inGameMenu=false;openGameMenu()':'mainMenu()';
-  const rows=[1,2,3].map(i=>{let meta=null;try{meta=JSON.parse(lsGet('if_meta_'+i)||'null')}catch(e){}
-    const label=meta?`<b>Slot ${i}: ${esc(meta.label)}</b><small>Game time ${esc(meta.time)} · saved ${esc(meta.date)}</small>`:`<b>Slot ${i}</b><small>Empty</small>`;
-    return `<button class="mission" ${mode==='load'&&!meta?'disabled':''} onclick="${mode==='save'?'saveGame':'loadGame'}(${i})">${label}</button>`}).join('');
+  const rows=[1,2,3,...(mode==='load'?['quick','auto']:[])].map(i=>{let meta=null;try{meta=JSON.parse(lsGet('if_meta_'+i)||'null')}catch(e){}
+    const nm=i==='quick'?'Quicksave (F5)':i==='auto'?'Autosave':'Slot '+i;
+    const label=meta?`<b>${nm}: ${esc(meta.label)}</b><small>Game time ${esc(meta.time)} · saved ${esc(meta.date)}</small>`:`<b>${nm}</b><small>Empty</small>`;
+    return `<button class="mission" ${mode==='load'&&!meta?'disabled':''} onclick="${mode==='save'?'saveGame':'loadGame'}(${typeof i==='string'?"'"+i+"'":i})">${label}</button>`}).join('');
   showMenu(`<h1>${mode==='save'?'SAVE GAME':'LOAD GAME'}</h1><div class="menu-list">${rows}<p class="sub" id="slotMsg"></p><button class="big" onclick="${back}">Back</button></div>`)}
 function endGame(win,reason){if(state!=='play')return;state='over';inGameMenu=false;$('designer').hidden=true;
   const tm=fmtTime(time);let btns;
@@ -186,18 +225,20 @@ function renderStats(box){
 }
 
 // ---------- SAVE / LOAD ----------
-function saveGame(slot){
-  const data={v:4,weather,size:MW,seed:mapSeed,theme:themeId,game,diff,time,power,tech,stats,ais,nextId,templates,groups,cam:{x:cam.x,y:cam.y,dist:cam.dist,yaw:cam.yaw,pitch:cam.pitch},
+function saveGame(slot,quiet){
+  const data={v:5,pickups,strikes,drumT,weather,size:MW,seed:mapSeed,theme:themeId,game,diff,time,power,tech,stats,ais,nextId,templates,groups,cam:{x:cam.x,y:cam.y,dist:cam.dist,yaw:cam.yaw,pitch:cam.pitch},
     explored:Array.from(explored).join(''),ents:ents.filter(e=>e.hp>0).map(e=>{const o={};for(const k in e)if(k!=='auto'&&k!=='st'&&k!=='sw')o[k]=e[k];return o})};
   const label=game.mode==='campaign'?'Mission '+(game.mission+1)+': '+MISSIONS[game.mission].name:'Skirmish: '+THEMES[themeId].name+', '+(game.teams-1)+' AI ('+diff+')';
   const ok=lsSet('if_save_'+slot,JSON.stringify(data))&&lsSet('if_meta_'+slot,JSON.stringify({label,time:fmtTime(time),date:new Date().toLocaleString()}));
+  if(ok&&quiet){msg(slot==='auto'?'Autosaved':'Quicksaved',1.5);return}
   if(ok){msg('Game saved to slot '+slot,2);sfx('complete');resumeGame()}else{const m=$('slotMsg');if(m)m.textContent='Saving failed. Your browser does not allow saving here.'}}
 function loadGame(slot){let s=null;try{s=JSON.parse(lsGet('if_save_'+slot)||'null')}catch(e){}
-  if(!s){const m=$('slotMsg');if(m)m.textContent='This save could not be loaded.';return}
+  if(!s){const m=$('slotMsg');if(m)m.textContent='This save could not be loaded.';else deny('No save found');return}
   audioInit();setMapSize(s.size||64);weather=s.weather||'clear';const clears=s.game.mode==='campaign'?(MISSIONS[s.game.mission].clears||[]):[];
   startWorld(s.seed,s.theme,clears,s.game.custom);
   game=s.game;diff=s.diff;time=s.time;power=s.power;tech=s.tech;stats=s.stats;ais=s.ais||[null,s.ai];templates=s.templates;groups=s.groups||{};
   for(const e of s.ents){e.auto=null;if(e.kind==='u')e.st=calcStats(e.d);else{e.sw=structWeapon(e.type);for(let y=e.ty;y<e.ty+e.h;y++)for(let x=e.tx;x<e.tx+e.w;x++)bldMap[idx(x,y)]=e.id;if(e.type==='derrick'){const o=oils[oilMap[idx(e.tx,e.ty)]-1];if(o)o.bid=e.id}}ents.push(e);byId.set(e.id,e)}
+  pickups=s.pickups||[];strikes=s.strikes||[];drumT=s.drumT||60;
   nextId=s.nextId;for(let i=0;i<MW*MH;i++){explored[i]=+s.explored[i]||0;fogCur[i]=explored[i]?150:238}
   beginPlay();Object.assign(cam,s.cam);msg('Game loaded',2)}
 
@@ -205,9 +246,10 @@ function loadGame(slot){let s=null;try{s=JSON.parse(lsGet('if_save_'+slot)||'nul
 function startWorld(seed,tid,clears,custom){
   gameId++;
   if(world)scene.remove(world);meshes.clear();world=new THREE.Group();scene.add(world);
-  ents=[];byId=new Map();nextId=1;sel=[];placing=null;projs=[];fx=[];decals=[];markers=[];time=0;paused=false;groups={};lastAlert=-99;stats={kills:0,lost:0,built:0};
+  ents=[];byId=new Map();nextId=1;sel=[];placing=null;pickups=[];strikes=[];drumT=60;autoT=0;projs=[];fx=[];decals=[];markers=[];time=0;paused=false;groups={};lastAlert=-99;stats={kills:0,lost:0,built:0};
   genMap(seed,tid,clears,custom);applyTheme();applyWeather();bldMap=new Int32Array(MW*MH);
   const tm=buildTerrainMesh();world.add(tm);
+  if(rock.some(v=>v===2)){const wm=new THREE.Mesh(new THREE.PlaneGeometry(WW,WH),new THREE.MeshLambertMaterial({color:theme.waterCol||0x2d6a8a,transparent:true,opacity:.8,depthWrite:false}));wm.rotation.x=-Math.PI/2;wm.position.set(WW/2,-6,WH/2);wm.renderOrder=2;wm.receiveShadow=true;world.add(wm)}
   explored=new Uint8Array(MW*MH);visible=new Uint8Array(MW*MH);fogCur=new Float32Array(MW*MH).fill(238);fogT=0;fogCv=null;
   fogTex=new THREE.DataTexture(new Uint8Array(MW*MH*4),MW,MH);fogTex.magFilter=fogTex.minFilter=THREE.LinearFilter;fogTex.needsUpdate=true;
   const fm=new THREE.Mesh(tm.geometry,new THREE.MeshBasicMaterial({color:0x000000,transparent:true,alphaMap:fogTex,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-4,polygonOffsetUnits:-4}));fm.renderOrder=3;world.add(fm);
@@ -228,10 +270,11 @@ function newSkirmish(o){sk=JSON.parse(JSON.stringify(o));audioInit();
   // allies take the corners next to the player, enemies the far ones
   const free=[1,2,3],corner=[0];for(let t=1;t<N;t++){const pref=ally[t]===0?[2,3,1]:[1,3,2],c=pref.find(x=>free.includes(x));free.splice(free.indexOf(c),1);corner.push(c)}
   for(let t=0;t<N;t++)stdBase(t,{corner:corner[t],start:custom?custom.starts[t]:null,extra:t&&o.diff!=='easy'?[['tower',1]]:[]});
+  initPickups();
   beginPlay();msg('Build oil derricks to get power. The first enemy attack comes in about '+Math.round(first/60)+' minutes!',8)}
 function startMission(i){const M=MISSIONS[i];audioInit();setMapSize(64);game={mode:'campaign',mission:i,ms:{t:0},teams:2,ally:[0,1]};diff='normal';weather=M.weather||'clear';startWorld(M.seed,M.theme,M.clears||[]);
   power=[M.power||1000,1200];tech=[Object.fromEntries(M.tech.map(k=>[k,true])),Object.fromEntries(M.enemyTech.map(k=>[k,true]))];templates=[[],[]];addDefaultTemplates(0);
-  ais=[null,newAI(M.ai)];initStats(2);M.setup();beginPlay();msg('Mission '+(i+1)+': '+M.name,4)}
+  ais=[null,newAI(M.ai)];initStats(2);M.setup();initPickups();beginPlay();msg('Mission '+(i+1)+': '+M.name,4)}
 
 // ---------- INPUT ----------
 function pickAt(sx,sy){let best=null,bd=1e9;
@@ -242,8 +285,8 @@ ui.addEventListener('contextmenu',e=>e.preventDefault());
 ui.addEventListener('mousedown',e=>{if(state!=='play'||uiOpen())return;audioInit();
   if(e.button===1){e.preventDefault();rot={x:e.clientX,y:e.clientY};return}
   const w=screenToWorld(e.clientX,e.clientY);
-  if(e.button===0){if(placing){if(w){if(placing.type==='wall')placing.start=[tileOf(w.x),tileOf(w.y)];else tryPlace(w.x,w.y,e.shiftKey)}return}drag={x0:e.clientX,y0:e.clientY,x1:e.clientX,y1:e.clientY,active:false,shift:e.shiftKey}}
-  else if(e.button===2){if(placing){placing=null;return}const t=pickAt(e.clientX,e.clientY);if(w||t)rightClick(w?w.x:t.x,w?w.y:t.y,t)}});
+  if(e.button===0){if(placing){if(w){if(placing.type==='lassat'){fireLassat(byId.get(placing.id),w.x,w.y);placing=null}else if(placing.type==='patrol'){setPatrol(w.x,w.y);placing=null}else if(placing.type==='wall')placing.start=[tileOf(w.x),tileOf(w.y)];else tryPlace(w.x,w.y,e.shiftKey)}return}drag={x0:e.clientX,y0:e.clientY,x1:e.clientX,y1:e.clientY,active:false,shift:e.shiftKey}}
+  else if(e.button===2){if(placing){if(placing.type==='patrol'&&w)setPatrol(w.x,w.y);placing=null;return}const t=pickAt(e.clientX,e.clientY);if(w||t)rightClick(w?w.x:t.x,w?w.y:t.y,t,e.shiftKey)}});
 ui.addEventListener('wheel',e=>{e.preventDefault();cam.dist*=e.deltaY>0?1.1:1/1.1},{passive:false});
 addEventListener('mousemove',e=>{mouse.x=e.clientX;mouse.y=e.clientY;mouse.in=true;
   if(rot){cam.yaw-=(e.clientX-rot.x)*.006;cam.pitch=clamp(cam.pitch+(e.clientY-rot.y)*.004,.55,1.35);rot={x:e.clientX,y:e.clientY}}
@@ -268,16 +311,21 @@ function tryPlace(wx,wy,keep){const d=BDEF[placing.type],tx=Math.round(wx/TILE-d
   if(power[0]<d.cost)return deny('Not enough power!');
   if(!canPlace(placing.type,tx,ty))return deny(placing.type==='derrick'?'Derricks must be built on free oil resources':'Cannot build there');
   const b=placeBuilding(placing.type,0,tx,ty);for(const t of sel.filter(e=>isTruck(e)&&e.team===0))orderBuild(t,b,true);sfx('place');if(!keep)placing=null}
-function rightClick(wx,wy,t){
+function setPatrol(x,y){let n=0;for(const u of sel)if(u.team===0&&u.kind==='u'){u.patrol={a:{x:u.x,y:u.y},b:{x,y},i:1};u.wp=[];orderMove(u,x,y,'amove');n++}if(n){markers.push({x,y,life:.5,c:'#6cf'});msg('Patrolling',1.5);sfx('ack')}}
+function rightClick(wx,wy,t,shift){
   const own=sel.filter(e=>e.team===0&&!e.stranded);if(!own.length)return;
-  if(own.length===1&&own[0].kind==='b'){if(own[0].type==='factory'){own[0].rally={x:wx,y:wy};markers.push({x:wx,y:wy,life:.5,c:'#8f8'});sfx('ack')}return}
+  if(own.length===1&&own[0].kind==='b'){if(own[0].type==='factory'||own[0].type==='cyborgFactory'){own[0].rally={x:wx,y:wy};markers.push({x:wx,y:wy,life:.5,c:'#8f8'});sfx('ack')}return}
   const us=own.filter(e=>e.kind==='u');if(!us.length)return;
+  if(t&&t.team===0&&t.kind==='u'&&t.st.util==='commander'&&us.some(u=>u!==t&&!u.st.util&&!isAir(u))){let n=0;for(const u of us)if(u!==t&&!u.st.util&&!isAir(u)){u.cmd=t.id;u.followT=0;u.wp=[];u.patrol=null;n++}
+    msg(n+' units now follow the Commander',2);markers.push({x:t.x,y:t.y,life:.5,c:'#ffe066'});sfx('ack');return}
+  if(!shift)for(const u of us){u.wp=[];u.patrol=null}
   if(t&&hostile(0,t.team)){for(const u of us){if(canHit(u,t)){u.order={t:'attack',id:t.id};u.repath=0;u.chasing=false;setPath(u,t.x,t.y)}else orderMove(u,wx,wy)}markers.push({x:t.x,y:t.y,life:.5,c:'#f66'});sfx('ack');return}
   if(t&&t.team===0&&t.kind==='u'&&t.st.util==='transport'&&us.some(u=>!isAir(u))){for(const u of us)if(!isAir(u)){u.order={t:'board',id:t.id};u.path=[];u.repath=0}markers.push({x:t.x,y:t.y,life:.5,c:'#6cf'});sfx('ack');return}
   if(t&&t.team===0&&t.kind==='b'&&(t.built<1||t.hp<t.maxHp)&&us.some(isTruck)){for(const u of us)if(isTruck(u))orderBuild(u,t);sfx('ack');return}
   if(t&&t.team===0&&t.kind==='u'&&t.hp<t.maxHp&&us.some(u=>u.st.util==='repair')){for(const u of us)if(u.st.util==='repair'){u.order=null;u.heal=t.id;u.path=[]}markers.push({x:t.x,y:t.y,life:.5,c:'#6f9'});sfx('ack');return}
   const n=us.length,cols=Math.ceil(Math.sqrt(n)),sp=34;
-  us.sort((a,b)=>dist(a,{x:wx,y:wy})-dist(b,{x:wx,y:wy})).forEach((u,i)=>{const cx=i%cols-(cols-1)/2,cy=Math.floor(i/cols)-(Math.ceil(n/cols)-1)/2;orderMove(u,wx+cx*sp,wy+cy*sp)});
+  us.sort((a,b)=>dist(a,{x:wx,y:wy})-dist(b,{x:wx,y:wy})).forEach((u,i)=>{const cx=i%cols-(cols-1)/2,cy=Math.floor(i/cols)-(Math.ceil(n/cols)-1)/2,x=wx+cx*sp,y=wy+cy*sp;
+    if(shift&&u.order&&(u.order.t==='move'||u.order.t==='amove')){(u.wp=u.wp||[]).push({x,y})}else{if(!shift)u.cmd=0;orderMove(u,x,y)}});
   markers.push({x:wx,y:wy,life:.5,c:'#8f8'});sfx('ack');
 }
 function unload(tr){const c=cargoOf(tr);const tx=tileOf(tr.x),ty=tileOf(tr.y);c.forEach((u,i)=>{const a=i*2.4,r=i?1+Math.floor(i/3):0,f=nearestFree(tx+Math.round(Math.cos(a)*r),ty+Math.round(Math.sin(a)*r),tx,ty);
@@ -290,8 +338,10 @@ mini.addEventListener('mousedown',e=>{if(state!=='play'||uiOpen())return;const p
 mini.addEventListener('mousemove',e=>{if(miniDrag){const p=miniPos(e);cam.x=p.x;cam.y=p.y}});
 addEventListener('mouseup',()=>miniDrag=false);
 addEventListener('keydown',e=>{const k=e.key.toLowerCase();keys[k]=true;
-  if(k==='escape'){if(!$('designer').hidden){closeDesigner();return}if(inGameMenu){resumeGame();return}if(state!=='play')return;if(placing){placing=null;return}if(sel.length){sel=[];return}openGameMenu();return}
+  if(k==='escape'){if(!$('designer').hidden){closeDesigner();return}if(!$('techtree').hidden){closeTree();return}if(inGameMenu){resumeGame();return}if(state!=='play')return;if(placing){placing=null;return}if(sel.length){sel=[];return}openGameMenu();return}
   if(k==='f10'){e.preventDefault();openGameMenu();return}
+  if(k==='f5'){e.preventDefault();if(state==='play'&&!uiOpen())saveGame('quick',true);return}
+  if(k==='f9'){e.preventDefault();if(state==='play'&&!uiOpen())loadGame('quick');return}
   if(state!=='play'||uiOpen())return;
   const gm=/^Digit([1-9])$/.exec(e.code);
   if(gm){const g=gm[1];
@@ -299,6 +349,9 @@ addEventListener('keydown',e=>{const k=e.key.toLowerCase();keys[k]=true;
     else{const list=(groups[g]||[]).map(id=>byId.get(id)).filter(alive);groups[g]=list.map(u=>u.id);
       if(list.length){const now=performance.now();if(lastGroupKey.k===g&&now-lastGroupKey.t<400){cam.x=list.reduce((s,u)=>s+u.x,0)/list.length;cam.y=list.reduce((s,u)=>s+u.y,0)/list.length}sel=list;sfx('click');lastGroupKey={k:g,t:now}}}
     return}
+  const bt=Object.keys(HOTKEYS).find(t=>HOTKEYS[t].toLowerCase()===k);
+  if(bt&&sel.some(e=>isTruck(e)&&e.team===0)){if(avail(0,BDEF[bt])){placing={type:bt};if(bt==='wall')msg('Click and drag to build a line of walls',2)}return}
+  if(k==='x'&&sel.some(e=>e.team===0&&e.kind==='u')){placing={type:'patrol'};msg('Click where the units should patrol to',2);return}
   if(k==='p')paused=!paused;
   if(k==='m')toggleSound();
   if(k==='u')unloadSel();
@@ -319,7 +372,7 @@ mainMenu();
 let last=performance.now();
 function loop(now){const dt=Math.min(.05,(now-last)/1000);last=now;const rt=now/1000;
   if(state!=='menu'){
-    if(state==='play'){if(!uiOpen())scrollCam(dt);if(!paused)update(dt);updateHud();if(msgT>0){msgT-=dt;if(msgT<=0)$('msg').textContent=''}}
+    if(state==='play'){if(!uiOpen())scrollCam(dt);if(!paused){update(dt);autoT+=dt;if(autoT>=180){autoT=0;saveGame('auto',true)}}updateHud();if(msgT>0){msgT-=dt;if(msgT<=0)$('msg').textContent=''}}
     for(const m of markers)m.life-=dt;markers=markers.filter(m=>m.life>0);
     updateCamera();updateWeather(dt,rt);syncScene(rt);renderer.render(scene,camera);mouse.world=screenToWorld(mouse.x,mouse.y);drawOverlay(rt);drawMinimap()}
   requestAnimationFrame(loop)}

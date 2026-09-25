@@ -19,6 +19,7 @@ const BODIES={
   viper:{name:'Viper',hp:170,cost:30,spd:1.05,size:1,desc:'Light body. Cheap and quick.'},
   cobra:{name:'Cobra',hp:330,cost:65,spd:1,size:1.2,desc:'Medium body. A good all-rounder.'},
   python:{name:'Python',hp:540,cost:110,spd:.88,size:1.4,req:'python',desc:'Heavy body. Very tough but slower.'},
+  cyborg:{name:'Cyborg',hp:150,cost:20,spd:1,size:.75,cyborg:true,desc:'Infantry body. Only built in a Cyborg Factory.'},
   mantis:{name:'Mantis',hp:720,cost:160,spd:.95,size:1.55,req:'mantis',desc:'Advanced heavy body. Tough and fast for its size.'}
 };
 const PROPS={
@@ -26,6 +27,7 @@ const PROPS={
   half:{name:'Half-tracks',speed:76,hpm:1,cost:20,desc:'Balanced speed and armor.'},
   tracks:{name:'Tracks',speed:58,hpm:1.3,cost:35,req:'tracks',desc:'Slow but very tough.'},
   hover:{name:'Hover',speed:122,hpm:.7,cost:30,req:'hover',desc:'Very fast, light armor.'},
+  legs:{name:'Legs',speed:58,hpm:1,cost:0,cyborg:true,desc:'Cyborg legs.'},
   vtol:{name:'VTOL',speed:175,hpm:.75,cost:70,req:'vtol',air:true,desc:'Flies over everything. Rearms at VTOL Pads.'}
 };
 const WEAPONS={
@@ -40,6 +42,7 @@ const WEAPONS={
   sensor:{name:'Radar Turret',cost:35,util:'sensor',desc:'Sees very far. Your artillery can fire at everything it spots.'},
   howitzer:{name:'Howitzer',cost:0,dmg:85,rof:7,range:1150,minRange:220,splash:75,proj:'shell',cls:'cannon',heavy:true,structOnly:true},
   ripple:{name:'Ripple Rockets',cost:0,dmg:45,rof:13,range:1900,minRange:320,splash:55,proj:'ripple',cls:'rocket',heavy:true,salvo:6,structOnly:true},
+  command:{name:'Command Turret',cost:60,util:'commander',req:'command',noVtol:true,desc:'Leads other units: nearby units deal +20% damage and take 15% less. Right-click it with units to make them follow.'},
   construct:{name:'Construction',cost:15,util:'truck',noVtol:true,desc:'Builds and repairs structures.'},
   repair:{name:'Repair Turret',cost:40,util:'repair',noVtol:true,heal:14,range:90,desc:'Repairs nearby damaged units.'},
   transport:{name:'Transport Bay',cost:40,util:'transport',vtolOnly:true,req:'vtol',cap:6,desc:'VTOL only. Carries up to 6 ground units over cliffs.'}
@@ -59,10 +62,14 @@ const BDEF={
   repairFac:{name:'Repair Facility',w:2,h:2,hp:900,cost:200,time:18,req:'repairfac',heal:32,range:110,desc:'Repairs nearby units. Send damaged units here.'},
   howitzer:{name:'Howitzer Emplacement',w:2,h:2,hp:1600,cost:450,time:30,weapon:'howitzer',gunH:30,req:'howitzer',desc:'Huge long-range gun. Fires at anything you can see, far across the map.'},
   ripple:{name:'Ripple Rocket Battery',w:3,h:3,hp:2600,cost:900,time:45,weapon:'ripple',gunH:40,req:'ripple',desc:'Gigantic rocket battery. Fires 6 rockets at a time over an enormous range.'},
+  cyborgFactory:{name:'Cyborg Factory',w:2,h:2,hp:900,cost:180,time:16,desc:'Produces cheap, fast cyborg infantry.'},
+  lassat:{name:'Laser Satellite Uplink',w:2,h:2,hp:2200,cost:1200,time:50,req:'lassat',desc:'Controls a laser satellite. Every 5 minutes it can strike any spot on the map.'},
   sensorTower:{name:'Radar Tower',w:1,h:1,hp:600,cost:100,time:10,desc:'Sees very far. Your artillery can fire at everything it spots.'},
   vtolPad:{name:'VTOL Pad',w:1,h:1,hp:500,cost:100,time:8,req:'vtol',desc:'VTOLs land here to rearm and repair.'}
 };
-const BUILD_LIST=['factory','research','derrick','wall','sensorTower','tower','bunker','hardpoint','mortarPit','aaSite','howitzer','ripple','repairFac','vtolPad'];
+const BUILD_LIST=['factory','cyborgFactory','research','derrick','wall','sensorTower','tower','bunker','hardpoint','mortarPit','aaSite','howitzer','ripple','lassat','repairFac','vtolPad'];
+const CYBORG_WEAPONS=['mg','flamer','lancer','cannon','laser'],LASSAT_CHARGE=300;
+const CYBORG_TPL=[{name:'Machinegunner',weapon:'mg'},{name:'Flamer Cyborg',weapon:'flamer'},{name:'Lancer Cyborg',weapon:'lancer'},{name:'Heavy Gunner',weapon:'cannon'},{name:'Laser Cyborg',weapon:'laser'}].map(t=>({...t,body:'cyborg',prop:'legs'}));
 const DEFENSES=['tower','bunker','hardpoint','mortarPit','aaSite'];
 const RESEARCH=[
   {id:'mg',name:'Hardened MG Bullets',desc:'+30% machinegun and AA damage',cost:120,time:18},
@@ -83,6 +90,8 @@ const RESEARCH=[
   {id:'optics',name:'Thermal Imaging',desc:'+25% sight range. Great at night and in bad weather',cost:180,time:22},
   {id:'howitzer',name:'Howitzer',desc:'Unlocks the long-range Howitzer Emplacement',cost:350,time:40,req:'mortar'},
   {id:'ripple',name:'Ripple Rockets',desc:'Unlocks the giant Ripple Rocket Battery',cost:600,time:60,req:'howitzer'},
+  {id:'command',name:'Command Turret',desc:'Unlocks Commanders that lead and boost your units',cost:200,time:25},
+  {id:'lassat',name:'Laser Satellite',desc:'Unlocks the Laser Satellite Uplink superweapon',cost:800,time:75,req:'laser'},
   {id:'armor',name:'Composite Alloys',desc:'+35% armor for everything',cost:250,time:30},
   {id:'oil',name:'Improved Derricks',desc:'+50% oil output',cost:200,time:25},
   {id:'engine',name:'Improved Engines',desc:'+20% unit speed',cost:150,time:20}
@@ -91,9 +100,9 @@ const RANKS=[0,1,3,6,10],RANK_NAMES=['Rookie','Green','Trained','Veteran','Elite
 const WEATHER={clear:{name:'Clear',sight:1},rain:{name:'Rain',sight:.8},snow:{name:'Snowfall',sight:.8},night:{name:'Night',sight:.65}};
 const DIFF={easy:{inc:.7,first:420,gap:200},normal:{inc:1,first:300,gap:160},hard:{inc:1.45,first:210,gap:120}};
 const THEMES={
-  desert:{name:'Desert Canyon',ground:'#9a7650',blot:['125,72,45','175,140,92'],speck:['rgba(60,40,25,.35)','rgba(215,185,135,.25)'],rockBase:'#5a4535',rock:['#6b5240','#4a392c','#7a604a','#3a2c22','#5e4a3a'],road:'#353432',bg:0x0b0812,hemi:[0xfff0dd,0x4a2c1a],sun:0xffe8cc,gen:'canyon',cliff:78,rocks:24},
-  snow:{name:'Frozen Pass',ground:'#d6dbe2',blot:['150,160,178','245,248,252'],speck:['rgba(110,120,140,.3)','rgba(255,255,255,.5)'],rockBase:'#59606b',rock:['#6e7682','#4b515b','#8a929e','#3a3f47','#626a75'],road:'#4a4d52',bg:0x0d1118,hemi:[0xe8f0ff,0x4a5260],sun:0xf0f4ff,gen:'canyon',cliff:92,rocks:30},
-  city:{name:'Ruined City',ground:'#6f6c66',blot:['90,88,84','135,128,118'],speck:['rgba(40,40,40,.35)','rgba(180,175,165,.25)'],rockBase:'#4c4845',rock:['#5d5955','#3e3b38','#6d6863','#2e2c2a','#55514c'],road:'#2e2e30',bg:0x0a0a0c,hemi:[0xf2eee8,0x3a3632],sun:0xfff4e0,gen:'city',cliff:72}
+  desert:{water:4,waterCol:0x2d6a8a,seabed:'#34525e',name:'Desert Canyon',ground:'#9a7650',blot:['125,72,45','175,140,92'],speck:['rgba(60,40,25,.35)','rgba(215,185,135,.25)'],rockBase:'#5a4535',rock:['#6b5240','#4a392c','#7a604a','#3a2c22','#5e4a3a'],road:'#353432',bg:0x0b0812,hemi:[0xfff0dd,0x4a2c1a],sun:0xffe8cc,gen:'canyon',cliff:78,rocks:24},
+  snow:{water:5,waterCol:0x7fa6c0,seabed:'#50667a',name:'Frozen Pass',ground:'#d6dbe2',blot:['150,160,178','245,248,252'],speck:['rgba(110,120,140,.3)','rgba(255,255,255,.5)'],rockBase:'#59606b',rock:['#6e7682','#4b515b','#8a929e','#3a3f47','#626a75'],road:'#4a4d52',bg:0x0d1118,hemi:[0xe8f0ff,0x4a5260],sun:0xf0f4ff,gen:'canyon',cliff:92,rocks:30},
+  city:{water:3,waterCol:0x2a4f60,seabed:'#2c3a40',name:'Ruined City',ground:'#6f6c66',blot:['90,88,84','135,128,118'],speck:['rgba(40,40,40,.35)','rgba(180,175,165,.25)'],rockBase:'#4c4845',rock:['#5d5955','#3e3b38','#6d6863','#2e2c2a','#55514c'],road:'#2e2e30',bg:0x0a0a0c,hemi:[0xf2eee8,0x3a3632],sun:0xfff4e0,gen:'city',cliff:72}
 };
 const DEFAULT_TEMPLATES=[
   {name:'Truck',body:'viper',prop:'wheels',weapon:'construct'},
@@ -109,18 +118,20 @@ const DEFAULT_TEMPLATES=[
   {name:'Radar Scout',body:'viper',prop:'wheels',weapon:'sensor'},
   {body:'cobra',prop:'half',weapon:'flamer'},
   {body:'mantis',prop:'tracks',weapon:'laser'},
-  {name:'Transport',body:'cobra',prop:'vtol',weapon:'transport'}
+  {name:'Transport',body:'cobra',prop:'vtol',weapon:'transport'},
+  {name:'Commander',body:'cobra',prop:'half',weapon:'command'}
 ];
 
 // ---------- STATE ----------
 let rock,bldMap,oilMap,oils=[],hv,ents=[],byId=new Map(),nextId=1,power=[0,0],tech=[{},{}],sel=[],placing=null,projs=[],fx=[],decals=[],time=0,state='menu',paused=false,diff='normal',ais=[],stats={kills:0,lost:0,built:0},terrainCv,miniBg,lastAlert=-99,msgT=0,roadPts=[],world=null,markers=[];
 let explored,visible,fogCur,fogTex=null,fogCv=null,fogT=0,missionT=0;
-let gameId=0,weather='clear',mapSeed=0,themeId='desert',theme=THEMES.desert,templates=[[],[]],groups={},game={mode:'skirmish',mission:-1,ms:{},teams:2,ally:[0,1]};
+let PW=false,strikes=[],pickups=[],drumT=60,cmdCache=[],gameId=0,weather='clear',mapSeed=0,themeId='desert',theme=THEMES.desert,templates=[[],[]],groups={},game={mode:'skirmish',mission:-1,ms:{},teams:2,ally:[0,1]};
 const alive=e=>!!e&&e.hp>0&&byId.has(e.id);
 function initStats(n){stats={kills:0,lost:0,built:0,team:Array.from({length:n},()=>({earned:0,kills:0,lost:0,built:0})),hist:[],histT:0}}
 const cargoOf=tr=>ents.filter(e=>e.inside===tr.id&&e.hp>0);
 function hostile(a,b){const al=game.ally||[0,1,2,3];return a!==b&&al[a]!==al[b]}
-function blocked(tx,ty){return !inb(tx,ty)||rock[idx(tx,ty)]===1||bldMap[idx(tx,ty)]!==0}
+// PW is switched on while path-finding or moving a hover unit, which can cross water
+function blocked(tx,ty){if(!inb(tx,ty))return true;const r=rock[idx(tx,ty)];return r===1||(r===2&&!PW)||bldMap[idx(tx,ty)]!==0}
 function edgeDist(a,b){return Math.hypot(a.x-b.x,a.y-b.y)-(b.kind==='b'?b.r:b.r*0.5)}
 function msg(t,d=3){$('msg').textContent=t;msgT=d}
 const has=(team,id)=>!!tech[team][id], avail=(team,c)=>!c.req||has(team,c.req);
@@ -131,8 +142,8 @@ const countB=(t,type,any)=>ents.filter(e=>e.team===t&&e.type===type&&e.hp>0&&(an
 const dkey=d=>d.body+'.'+d.prop+'.'+d.weapon;
 function calcStats(d){const b=BODIES[d.body],p=PROPS[d.prop],w=WEAPONS[d.weapon],cost=b.cost+p.cost+w.cost;
   return{hp:Math.round(b.hp*p.hpm),speed:p.speed*b.spd*(w.heavy?.92:1),cost,time:Math.round(Math.max(4,cost/17)),r:Math.round(11*b.size+2),air:!!p.air,w,util:w.util||null,
-    gunH:(p.air?3:(d.prop==='tracks'||d.prop==='hover'?11:10))+6*b.size,name:w.util==='truck'&&d.body==='viper'&&d.prop==='wheels'?'Truck':w.util==='transport'?b.name+' Transport':w.name+' '+b.name+' '+p.name}}
-function designError(d){const p=PROPS[d.prop],w=WEAPONS[d.weapon];if(p.air&&w.noVtol)return w.name+' cannot be mounted on a VTOL.';if(w.vtolOnly&&!p.air)return w.name+' can only be carried by a VTOL.';return ''}
+    gunH:(p.air?3:(d.prop==='tracks'||d.prop==='hover'?11:10))+6*b.size,name:w.util==='truck'&&d.body==='viper'&&d.prop==='wheels'?'Truck':b.cyborg?w.name+' Cyborg':w.util==='transport'?b.name+' Transport':w.name+' '+b.name+' '+p.name}}
+function designError(d){const p=PROPS[d.prop],w=WEAPONS[d.weapon],b=BODIES[d.body];if(!!b.cyborg!==!!p.cyborg)return 'Cyborgs need the Cyborg body with Legs.';if(b.cyborg&&!CYBORG_WEAPONS.includes(d.weapon))return w.name+' cannot be carried by a cyborg.';if(p.air&&w.noVtol)return w.name+' cannot be mounted on a VTOL.';if(w.vtolOnly&&!p.air)return w.name+' can only be carried by a VTOL.';return ''}
 function designOk(team,d){return !designError(d)&&avail(team,BODIES[d.body])&&avail(team,PROPS[d.prop])&&avail(team,WEAPONS[d.weapon])}
 function addDefaultTemplates(team){let n=0;for(const t of DEFAULT_TEMPLATES)if(designOk(team,t)&&!templates[team].some(x=>dkey(x)===dkey(t))){templates[team].push({...t,name:t.name||calcStats(t).name});n++}return n}
 function structWeapon(type){const d=BDEF[type];if(!d.weapon)return null;const w=WEAPONS[d.weapon];return{...w,range:w.range+(d.rangeAdd||0),dmg:w.dmg*(d.dmgMul||1)}}
@@ -140,7 +151,8 @@ const wOf=e=>e.kind==='u'?e.st.w:e.sw;
 const isAir=e=>e.kind==='u'&&e.st.air;
 const isTruck=e=>e.kind==='u'&&e.st.util==='truck';
 function dmgMult(team,cls){const t=tech[team];return cls==='mg'?(t.mg?1.3:1):cls==='cannon'?(t.cannon?1.3:1):cls==='rocket'?(t.rocket?1.3:1):1}
-function dmgOf(e){const w=wOf(e);return w.dmg*dmgMult(e.team,w.cls)*(e.kind==='u'?1+.12*e.rank:1)}
+const aura=e=>cmdCache.some(c=>c.team===e.team&&c!==e&&Math.abs(c.x-e.x)<320&&Math.hypot(c.x-e.x,c.y-e.y)<320);
+function dmgOf(e){const w=wOf(e);return w.dmg*dmgMult(e.team,w.cls)*(e.kind==='u'?(1+.12*e.rank)*(aura(e)?1.2:1):1)}
 function canHit(e,o){const w=wOf(e);if(!w||w.util)return false;if(isAir(o))return !!w.air&&!isAir(e);return !w.airOnly}
 
 // ---------- MAP ----------
@@ -156,11 +168,12 @@ function oilQuarter(){const S=MW,b=baseTile(),o=[[b[0]-5,b[1]-6],[b[0]+4,b[1]+5]
 function genMap(seed,tid,clears,custom){
   theme=THEMES[tid];themeId=tid;mapSeed=seed;
   const r=rng(seed);rock=new Uint8Array(MW*MH);
-  if(custom){for(let i=0;i<MW*MH;i++)rock[i]=custom.rock.charCodeAt(i)===49?1:0;
+  if(custom){for(let i=0;i<MW*MH;i++){const c=custom.rock.charCodeAt(i);rock[i]=c===49?1:c===50?2:0}
     for(const s of custom.starts)for(let y=s[1]-5;y<=s[1]+5;y++)for(let x=s[0]-5;x<=s[0]+5;x++)if(inb(x,y)&&(x-s[0])**2+(y-s[1])**2<=25)rock[idx(x,y)]=0;
     for(const o of custom.oils)if(inb(o[0],o[1]))rock[idx(o[0],o[1])]=0}
   else if(theme.gen==='city'){for(let by=1;by<MH;by+=8)for(let bx=1;bx<MW;bx+=8){if(r()<.18)continue;const w=2+Math.floor(r()*4),h=2+Math.floor(r()*4),ox=bx+1+Math.floor(r()*(7-w)),oy=by+1+Math.floor(r()*(7-h));for(let y=oy;y<oy+h;y++)for(let x=ox;x<ox+w;x++)setRock(x,y,1)}}
   else for(let i=0;i<theme.rocks*(MW/64)**2;i++){const cx=3+r()*(MW-6),cy=3+r()*(MH-6),rad=1.5+r()*3.2;disc(cx,cy,rad,1);for(let k=0;k<3;k++)disc(cx+(r()-.5)*rad*2.2,cy+(r()-.5)*rad*2.2,rad*.7,1)}
+  if(!custom&&theme.water)for(let i=0;i<theme.water*(MW/64)**2;i++){const cx=6+r()*(MW-12),cy=6+r()*(MH-12),rad=2+r()*3;disc(cx,cy,rad,2);for(let k=0;k<2;k++)disc(cx+(r()-.5)*rad*2,cy+(r()-.5)*rad*2,rad*.7,2)}
   const B=custom?custom.starts[0]:baseTile(),MID=[MW/2-.5,MH/2-.5],OQ=custom?[]:oilQuarter();
   if(!custom)disc(B[0],B[1],10,0);
   for(const o of OQ){carve(o[0],o[1],MID[0],MID[1],1.3);disc(o[0],o[1],2,0)}
@@ -169,17 +182,18 @@ function genMap(seed,tid,clears,custom){
   for(let x=0;x<MW;x++)for(let y=0;y<MH;y++)if(x<2||y<2||x>=MW-2||y>=MH-2)rock[idx(x,y)]=1;
   const seen=new Uint8Array(MW*MH),st=[idx(B[0],B[1])];seen[st[0]]=1;
   while(st.length){const n=st.pop(),x=n%MW,y=n/MW|0;for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]]){const nx=x+dx,ny=y+dy;if(inb(nx,ny)&&!rock[idx(nx,ny)]&&!seen[idx(nx,ny)]){seen[idx(nx,ny)]=1;st.push(idx(nx,ny))}}}
-  for(let i=0;i<MW*MH;i++)if(!seen[i])rock[i]=1;
+  for(let i=0;i<MW*MH;i++)if(!seen[i]&&rock[i]!==2)rock[i]=1;
   oils=[];oilMap=new Int16Array(MW*MH);
   for(const o of OQ)for(const p of[[o[0],o[1]],[MW-1-o[0],o[1]],[o[0],MH-1-o[1]],[MW-1-o[0],MH-1-o[1]]]){if(!inb(p[0],p[1])||oilMap[idx(p[0],p[1])]||rock[idx(p[0],p[1])])continue;oils.push({tx:p[0],ty:p[1],x:(p[0]+.5)*TILE,y:(p[1]+.5)*TILE,bid:0});oilMap[idx(p[0],p[1])]=oils.length}
   if(custom)for(const p of custom.oils){if(!inb(p[0],p[1])||oilMap[idx(p[0],p[1])]||rock[idx(p[0],p[1])])continue;oils.push({tx:p[0],ty:p[1],x:(p[0]+.5)*TILE,y:(p[1]+.5)*TILE,bid:0});oilMap[idx(p[0],p[1])]=oils.length}
   roadPts=custom?custom.starts.map(s=>[[s[0]*TILE,s[1]*TILE],[MID[0]*TILE,MID[1]*TILE]]):[[B[0],B[1]],[MW-B[0],B[1]],[B[0],MH-B[1]],[MW-B[0],MH-B[1]]].map(p=>[[p[0]*TILE,p[1]*TILE],[MID[0]*TILE,MID[1]*TILE]]);
   hv=new Float32Array(HN*HN);
-  const isR=(x,y)=>{const tx=tileOf(x),ty=tileOf(y);return !inb(tx,ty)||rock[idx(tx,ty)]?1:0},city=theme.gen==='city';
+  const isR=(x,y)=>{const tx=tileOf(x),ty=tileOf(y);return !inb(tx,ty)||rock[idx(tx,ty)]===1?1:0},isW=(x,y)=>{const tx=tileOf(x),ty=tileOf(y);return inb(tx,ty)&&rock[idx(tx,ty)]===2?1:0},city=theme.gen==='city';
   for(let j=0;j<HN;j++)for(let i=0;i<HN;i++){const x=i*HSTEP,y=j*HSTEP;
     const f=(isR(x-10,y-10)+isR(x+10,y-10)+isR(x-10,y+10)+isR(x+10,y+10))/4;
     const n=(Math.sin(x*.011+1.3)*Math.cos(y*.009)*5+Math.sin(x*.031+y*.027)*2)*(city?.25:1);
-    hv[j*HN+i]=n+f*(city?theme.cliff+(f>=1?(r()<.5?0:18):0):theme.cliff+r()*26*f)}
+    const wf=(isW(x-10,y-10)+isW(x+10,y-10)+isW(x-10,y+10)+isW(x+10,y+10))/4;
+    hv[j*HN+i]=n+f*(city?theme.cliff+(f>=1?(r()<.5?0:18):0):theme.cliff+r()*26*f)-wf*18}
   buildTerrainTexture(r);
 }
 function heightAt(x,y){const fx=clamp(x/HSTEP,0,HN-1.001),fy=clamp(y/HSTEP,0,HN-1.001),i=fx|0,j=fy|0,u=fx-i,v=fy-j;
@@ -195,12 +209,16 @@ function buildTerrainTexture(r){
   for(const rp of roadPts)road(rp);
   for(let i=0;i<40*area;i++){const x=r()*WW,y=r()*WH;if(rock[idx(tileOf(x),tileOf(y))])continue;const rad=8+r()*14;const gr=g.createRadialGradient(x,y,0,x,y,rad);gr.addColorStop(0,'rgba(30,18,10,.8)');gr.addColorStop(.7,'rgba(70,40,20,.5)');gr.addColorStop(1,'rgba(160,110,60,0)');g.fillStyle=gr;g.beginPath();g.arc(x,y,rad,0,7);g.fill()}
   if(T.gen==='city'){
-    for(let y=0;y<MH;y++)for(let x=0;x<MW;x++)if(rock[idx(x,y)]){g.fillStyle=T.rockBase;g.fillRect(x*TILE,y*TILE,TILE,TILE);g.fillStyle=T.rock[Math.floor(r()*5)];g.fillRect(x*TILE+4,y*TILE+4,TILE-8,TILE-8);
+    for(let y=0;y<MH;y++)for(let x=0;x<MW;x++)if(rock[idx(x,y)]===1){g.fillStyle=T.rockBase;g.fillRect(x*TILE,y*TILE,TILE,TILE);g.fillStyle=T.rock[Math.floor(r()*5)];g.fillRect(x*TILE+4,y*TILE+4,TILE-8,TILE-8);
       if(r()<.5){g.fillStyle='#2a2826';g.fillRect(x*TILE+8+r()*16,y*TILE+8+r()*16,8,8)}
       g.strokeStyle='rgba(0,0,0,.35)';g.lineWidth=1;g.strokeRect(x*TILE+.5,y*TILE+.5,TILE-1,TILE-1)}}
   else{
-    for(let y=0;y<MH;y++)for(let x=0;x<MW;x++)if(rock[idx(x,y)]){g.fillStyle=T.rockBase;g.fillRect(x*TILE-6,y*TILE-6,TILE+12,TILE+12)}
-    for(let y=0;y<MH;y++)for(let x=0;x<MW;x++)if(rock[idx(x,y)]){for(let k=0;k<5;k++){const px=x*TILE+r()*TILE,py=y*TILE+r()*TILE,s=6+r()*14;g.fillStyle=T.rock[k];g.beginPath();g.moveTo(px,py-s);g.lineTo(px+s,py);g.lineTo(px+s*.3,py+s*.8);g.lineTo(px-s*.8,py+s*.2);g.closePath();g.fill()}}}
+    for(let y=0;y<MH;y++)for(let x=0;x<MW;x++)if(rock[idx(x,y)]===1){g.fillStyle=T.rockBase;g.fillRect(x*TILE-6,y*TILE-6,TILE+12,TILE+12)}
+    for(let y=0;y<MH;y++)for(let x=0;x<MW;x++)if(rock[idx(x,y)]===1){for(let k=0;k<5;k++){const px=x*TILE+r()*TILE,py=y*TILE+r()*TILE,s=6+r()*14;g.fillStyle=T.rock[k];g.beginPath();g.moveTo(px,py-s);g.lineTo(px+s,py);g.lineTo(px+s*.3,py+s*.8);g.lineTo(px-s*.8,py+s*.2);g.closePath();g.fill()}}}
+  // lake beds, and wooden bridges where a road crosses water
+  const wat=(x,y)=>inb(x,y)&&rock[idx(x,y)]===2;
+  for(let y=0;y<MH;y++)for(let x=0;x<MW;x++){if(wat(x,y)){g.fillStyle=T.seabed;g.fillRect(x*TILE-3,y*TILE-3,TILE+6,TILE+6)}
+    else if(!rock[idx(x,y)]&&((wat(x-1,y)&&wat(x+1,y))||(wat(x,y-1)&&wat(x,y+1)))){g.fillStyle='#6b4a2a';g.fillRect(x*TILE,y*TILE,TILE,TILE);g.strokeStyle='#3e2a16';g.lineWidth=2;for(let k=5;k<TILE;k+=8){g.beginPath();if(wat(x-1,y)){g.moveTo(x*TILE,y*TILE+k);g.lineTo(x*TILE+TILE,y*TILE+k)}else{g.moveTo(x*TILE+k,y*TILE);g.lineTo(x*TILE+k,y*TILE+TILE)}g.stroke()}}}
   miniBg=document.createElement('canvas');miniBg.width=miniBg.height=154;miniBg.getContext('2d').drawImage(terrainCv,0,0,154,154);
 }
 
@@ -231,7 +249,8 @@ function findPath(sx,sy,gx,gy){
 }
 function lineClear(ax,ay,bx,by){const d=Math.hypot(bx-ax,by-ay),n=Math.ceil(d/8),px=-(by-ay)/(d||1)*10,py=(bx-ax)/(d||1)*10;
   for(let i=1;i<=n;i++){const x=ax+(bx-ax)*i/n,y=ay+(by-ay)*i/n;if(blocked(tileOf(x),tileOf(y))||blocked(tileOf(x+px),tileOf(y+py))||blocked(tileOf(x-px),tileOf(y-py)))return false}return true}
-function setPath(u,x,y){
+function setPath(u,x,y){PW=!!u.d&&u.d.prop==='hover';try{setPath0(u,x,y)}finally{PW=false}}
+function setPath0(u,x,y){
   if(u.st.air){u.path=[];return}
   const tx=tileOf(x),ty=tileOf(y),p=findPath(tileOf(u.x),tileOf(u.y),tx,ty);
   if(!p){u.path=[];return}
@@ -275,7 +294,7 @@ function speedOf(u){return u.st.speed*(tech[u.team].engine?1.2:1)}
 
 function damage(t,d,team,src){
   if(!alive(t)||!hostile(team,t.team))return;
-  t.hp-=d*(tech[t.team].armor?1/1.35:1)*(t.kind==='u'?1-.04*t.rank:1);
+  t.hp-=d*(tech[t.team].armor?1/1.35:1)*(t.kind==='u'?(1-.04*t.rank)*(aura(t)?.85:1):1);
   if(t.team===0&&time-lastAlert>15){lastAlert=time;msg(t.kind==='b'?'Our base is under attack!':'Our units are under attack!');sfx('alert');say(t.kind==='b'?'Base under attack':'Units under attack')}
   if(t.hp<=0){kill(t,team);if(src&&alive(src)&&src.kind==='u')addKill(src)}
 }
@@ -291,6 +310,7 @@ function kill(t,killer){
   if(t.kind==='u')for(const c of ents)if(c.inside===t.id&&c.hp>0)kill(c,killer);
   if(t.kind==='b'){for(let y=t.ty;y<t.ty+t.h;y++)for(let x=t.tx;x<t.tx+t.w;x++)if(bldMap[idx(x,y)]===t.id)bldMap[idx(x,y)]=0;
     if(t.type==='derrick')for(const o of oils)if(o.bid===t.id)o.bid=0;
+    if(t.built>=1&&(t.type==='research'||t.type==='factory'||t.type==='cyborgFactory'))pickups.push({id:nextId++,kind:'art',x:t.x,y:t.y,tech:Object.keys(tech[t.team]).filter(k=>tech[t.team][k])});
     if(t.type==='hq'){if(t.team===0)later(()=>endGame(false,'Your Command Center was destroyed.'),1500);
       else if(game.mode==='skirmish'){if(ents.some(e=>e.type==='hq'&&e.hp>0&&hostile(0,e.team)))msg(TEAM_NAMES[t.team]+' has been defeated!',4);else later(()=>endGame(true,'All enemy Command Centers destroyed!'),1500)}}}
   sel=sel.filter(e=>e!==t);
@@ -334,7 +354,8 @@ function combat(e,dt,want){
 }
 
 // ---------- UNIT UPDATE ----------
-function moveAlong(u,dt){
+function moveAlong(u,dt){PW=u.d.prop==='hover';try{return moveAlong0(u,dt)}finally{PW=false}}
+function moveAlong0(u,dt){
   if(!u.path.length)return true;
   const[px,py]=u.path[0],dx=px-u.x,dy=py-u.y,d=Math.hypot(dx,dy),sp=speedOf(u)*dt;
   u.angle=turnTo(u.angle,Math.atan2(dy,dx),5*dt);
@@ -349,6 +370,7 @@ function updateUnit(u,dt){
   if(u.inside){const tr=byId.get(u.inside);if(tr){u.x=tr.x;u.y=tr.y}return}
   u.cd-=dt;u.scan-=dt;u.healT=0;
   if(u.stranded)return;
+  if(!u.order&&((u.wp&&u.wp.length)||u.patrol))nextOrder(u);
   if(u.st.air){updateAir(u,dt);return}
   if(u.order&&u.order.t==='board'){const tr=byId.get(u.order.id);if(!tr||cargoOf(tr).length>=tr.st.w.cap){u.order=null;u.path=[];return}
     if(Math.hypot(tr.x-u.x,tr.y-u.y)<80){u.inside=tr.id;u.order=null;u.path=[];sel=sel.filter(e=>e!==u);if(u.team===0)sfx('click');return}
@@ -358,14 +380,17 @@ function updateUnit(u,dt){
     else if(u.path.length&&mv<6&&u.order&&u.order.x!==undefined){if(Math.hypot(u.x-u.order.x,u.y-u.order.y)<70){u.path=[];if(u.order.t==='move'||u.order.t==='amove'){u.order=null;u.home={x:u.x,y:u.y}}}else setPath(u,u.order.x,u.order.y)}}
   if(u.st.util==='truck'){updateTruck(u,dt);return}
   if(u.st.util==='repair'){updateRepairUnit(u,dt);return}
-  if(u.st.util==='sensor'){u.turret+=dt*2;if(u.order&&moveAlong(u,dt)){u.order=null;u.home={x:u.x,y:u.y}}return}
-  const w=u.st.w,range=w.range;
-  if(u.scan<=0){u.scan=.25+R()*.1;u.auto=findTarget(u,range+130,w.minRange||0)}
+  if(u.st.util==='sensor'||u.st.util==='commander'){if(u.st.util==='sensor')u.turret+=dt*2;if(u.order&&moveAlong(u,dt)){u.order=null;u.home={x:u.x,y:u.y}}return}
+  const w=u.st.w,range=w.range,stance=u.stance||'aggressive';
+  if(u.scan<=0){u.scan=.25+R()*.1;u.auto=stance==='passive'?null:findTarget(u,range+130,w.minRange||0)}
+  // followers stay close to their commander
+  if(u.cmd){const c=byId.get(u.cmd);if(!alive(c)||c.inside)u.cmd=0;else{u.followT=(u.followT||0)-dt;
+    if(u.followT<=0&&(!u.order||u.order.follow)&&!(alive(u.auto)&&edgeDist(u,u.auto)<range)){u.followT=1.5;if(Math.hypot(c.x-u.x,c.y-u.y)>130){const a=(u.id%8)/8*Math.PI*2;orderMove(u,c.x+Math.cos(a)*70,c.y+Math.sin(a)*70,'amove');u.order.follow=true}}}}
   let want=null,o=u.order;
   if(o&&o.t==='attack'){want=byId.get(o.id);if(!alive(want)||!canHit(u,want)){u.order=o=null;want=null;u.home={x:u.x,y:u.y}}}
   if(!want&&alive(u.auto)){
-    if(!o&&edgeDist(u,u.auto)<=range+100&&Math.hypot(u.x-u.home.x,u.y-u.home.y)<380)want=u.auto;
-    else if(o&&o.t==='amove')want=u.auto}
+    if(!o&&stance==='aggressive'&&edgeDist(u,u.auto)<=range+100&&Math.hypot(u.x-u.home.x,u.y-u.home.y)<380)want=u.auto;
+    else if(o&&o.t==='amove'&&stance!=='hold')want=u.auto}
   if(want){
     const d=edgeDist(u,want);
     if(d>range-5){u.chasing=true;u.repath-=dt;if(u.repath<=0||!u.path.length){u.repath=.8;setPath(u,want.x,want.y)}moveAlong(u,dt)}
@@ -378,6 +403,8 @@ function updateUnit(u,dt){
     moveAlong(u,dt)}
   combat(u,dt,want);
 }
+function nextOrder(u){if(u.wp&&u.wp.length){const w=u.wp.shift();orderMove(u,w.x,w.y,w.t||'move');return true}
+  if(u.patrol){const p=u.patrol;p.i=1-(p.i||0);const q=p.i?p.b:p.a;orderMove(u,q.x,q.y,'amove');return true}return false}
 function nextBuild(u){while(u.bq&&u.bq.length){const n=byId.get(u.bq.shift());if(n&&(n.built<1||n.hp<n.maxHp)){u.order={t:'build',id:n.id};u.path=[];u.repath=0;return}}u.order=null;u.path=[];u.home={x:u.x,y:u.y}}
 // true when the truck stands on a tile touching the building (diagonals included)
 function nearFootprint(u,b){const tx=tileOf(u.x),ty=tileOf(u.y),dx=Math.max(b.tx-tx,0,tx-(b.tx+b.w-1)),dy=Math.max(b.ty-ty,0,ty-(b.ty+b.h-1));return Math.max(dx,dy)<=1||(!u.path.length&&edgeDist(u,b)<=60)}
@@ -436,16 +463,34 @@ function updateAir(u,dt){
 function updateBuilding(b,dt){
   if(b.built<1)return;
   b.healT=0;
-  if(b.type==='factory'&&b.queue.length){b.prog+=dt;const st=calcStats(b.queue[0]);
+  if((b.type==='factory'||b.type==='cyborgFactory')&&b.queue.length){b.prog+=dt;const st=calcStats(b.queue[0]);
     if(b.prog>=st.time){const cnt=ents.filter(e=>e.kind==='u'&&e.team===b.team).length;
       if(cnt<UNIT_CAP){b.prog=0;spawnUnit(b,b.queue.shift());if(b.team===0){sfx('ready');say('Unit ready')}}else b.prog=st.time}}
   if(b.type==='research'&&b.res){b.res.prog+=dt;const r=RESEARCH.find(x=>x.id===b.res.id);
     if(b.res.prog>=r.time){b.res=null;onResearch(b.team,r)}}
   if(b.sw){b.cd-=dt;b.scan-=dt;if(b.scan<=0){b.scan=.3;b.auto=findTarget(b,b.sw.range,b.sw.minRange||0)}combat(b,dt,null)}
+  if(b.type==='lassat'){b.charge=Math.min(LASSAT_CHARGE,(b.charge||0)+dt);if(b.charge>=LASSAT_CHARGE&&!b.ready){b.ready=true;if(b.team===0){msg('Laser Satellite ready!',3);sfx('complete');say('Laser satellite ready')}}}
   if(b.type==='repairFac'){const D=BDEF.repairFac;let t=b.heal?byId.get(b.heal):null;
     if(!t||t.hp>=t.maxHp||dist(t,b)>D.range){t=null;b.heal=0;b.scan-=dt;if(b.scan<=0){b.scan=.4;let bd=D.range;for(const e of ents)if(e.team===b.team&&e.kind==='u'&&!isAir(e)&&e.hp<e.maxHp){const d=dist(e,b);if(d<bd){bd=d;t=e}}if(t)b.heal=t.id}}
     if(t){t.hp=Math.min(t.maxHp,t.hp+D.heal*dt);b.healT=t.id}}
 }
+function fireLassat(b,x,y){if(!b||b.type!=='lassat'||(b.charge||0)<LASSAT_CHARGE)return false;b.charge=0;b.ready=false;strikes.push({x,y,t:time+2.2,team:b.team});fx.push({t:'aim',x,y,life:2.2,max:2.2});
+  if(b.team!==0){msg('Warning: enemy Laser Satellite strike incoming!',3);sfx('alert');say('Warning. Laser satellite strike')}else sfx('ack');return true}
+function updateStrikes(){for(const s of strikes)if(time>=s.t){s.done=true;fx.push({t:'pillar',x:s.x,y:s.y,life:1.4,max:1.4});sfx('lassat');
+  for(let i=0;i<6;i++)boom(s.x+(R()-.5)*260,s.y+(R()-.5)*260,30,30);boom(s.x,s.y,60,80);addDecal(s.x,s.y,90);
+  for(const o of ents)if(o.hp>0&&!o.inside){const d=Math.hypot(o.x-s.x,o.y-s.y);if(d<240)damage(o,1600*(1-d/260),s.team,null)}}
+  strikes=strikes.filter(s=>!s.done)}
+// ---------- PICKUPS: oil drums and artifacts ----------
+function spawnDrum(){for(let k=0;k<40;k++){const tx=2+Math.floor(R()*(MW-4)),ty=2+Math.floor(R()*(MH-4));if(blocked(tx,ty)||oilMap[idx(tx,ty)])continue;const x=(tx+.5)*TILE,y=(ty+.5)*TILE;
+  if(ents.some(e=>e.type==='hq'&&Math.hypot(e.x-x,e.y-y)<350))continue;pickups.push({id:nextId++,kind:'oil',x,y});return}}
+function initPickups(){for(let i=0;i<4*(MW/64)**2;i++)spawnDrum()}
+function collect(p,team){p.taken=true;for(let k=0;k<12;k++)fx.push({t:'p',k:'fire',x:p.x,y:p.y,h:heightAt(p.x,p.y)+10,vx:(R()-.5)*80,vy:(R()-.5)*80,vh:60+R()*60,life:.6,max:.6});
+  if(p.kind==='oil'){power[team]+=100;if(team===0){msg('Oil drum collected: +100 power',2);sfx('complete')}return}
+  const list=RESEARCH.filter(r=>(p.tech||[]).includes(r.id)&&!tech[team][r.id]&&(!r.req||tech[team][r.req]));
+  if(list.length){const r=list[Math.floor(R()*list.length)];if(team===0)msg('Artifact recovered: '+r.name+'!',3);onResearch(team,r)}else{power[team]+=300;if(team===0){msg('Artifact recovered: +300 power',2.5);sfx('complete')}}}
+function updatePickups(dt){drumT-=dt;if(drumT<=0){drumT=50+R()*60;if(pickups.filter(p=>p.kind==='oil').length<6*(MW/64)**2)spawnDrum()}
+  for(const p of pickups)for(const u of ents){if(u.kind!=='u'||u.hp<=0||u.inside||u.st.air||u.stranded)continue;if(Math.abs(u.x-p.x)<32&&Math.abs(u.y-p.y)<32){collect(p,u.team);break}}
+  pickups=pickups.filter(p=>!p.taken)}
 function onResearch(team,r){tech[team][r.id]=true;
   if(team===0){msg('Research complete: '+r.name);sfx('complete');say('Research completed');const n=addDefaultTemplates(0);if(n)setTimeout(()=>msg('New unit designs are available in your Factory',3),1500)}}
 const towardY=b=>b.y<WH/2?1:-1;
@@ -463,7 +508,8 @@ function incomeOf(t){let r=0;for(const e of ents)if(e.team===t&&e.kind==='b'&&e.
 
 // ---------- MAIN UPDATE ----------
 function update(dt){
-  time+=dt;
+  time+=dt;cmdCache=ents.filter(e=>e.kind==='u'&&e.hp>0&&!e.inside&&e.st.util==='commander');
+  updateStrikes();updatePickups(dt);
   for(let t=0;t<power.length;t++){const inc=incomeOf(t)*dt;power[t]+=inc;if(stats.team&&stats.team[t])stats.team[t].earned+=inc}
   if(stats.hist){stats.histT-=dt;if(stats.histT<=0){stats.histT=10;recordStats()}}
   for(const e of ents){if(e.hp<=0)continue;if(e.kind==='u')updateUnit(e,dt);else updateBuilding(e,dt)}
@@ -472,8 +518,9 @@ function update(dt){
   for(let i=0;i<us.length;i++)for(let j=i+1;j<us.length;j++){const a=us[i],b=us[j],dx=b.x-a.x,dy=b.y-a.y,m=a.r+b.r-6;
     if(Math.abs(dx)<m&&Math.abs(dy)<m){const d=Math.hypot(dx,dy)||.01;if(d<m){const p=(m-d)/2*.5,nx=dx/d,ny=dy/d;if(!a.stranded){a.x-=nx*p;a.y-=ny*p}if(!b.stranded){b.x+=nx*p;b.y+=ny*p}}}}
   for(let i=0;i<as.length;i++)for(let j=i+1;j<as.length;j++){const a=as[i],b=as[j],dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||.01;if(d<30){const p=(30-d)*.5*dt*4;a.x-=dx/d*p;a.y-=dy/d*p;b.x+=dx/d*p;b.y+=dy/d*p}}
-  for(const u of us){if(blocked(tileOf(u.x),tileOf(u.y))){u.x=u.sx;u.y=u.sy;
+  for(const u of us){PW=u.d.prop==='hover';if(blocked(tileOf(u.x),tileOf(u.y))){u.x=u.sx;u.y=u.sy;
     if(blocked(tileOf(u.x),tileOf(u.y))){const f=nearestFree(tileOf(u.x),tileOf(u.y),tileOf(u.x),tileOf(u.y));if(f){u.x+=((f[0]+.5)*TILE-u.x)*Math.min(1,dt*6);u.y+=((f[1]+.5)*TILE-u.y)*Math.min(1,dt*6)}}}}
+  PW=false;
   for(const p of projs){const t=p.tid?byId.get(p.tid):null;if(t){p.tx=t.x+p.ox;p.ty=t.y+p.oy;p.th=t.h||0}
     if(p.proj==='flame')for(let k=0;k<2;k++)fx.push({t:'p',k:'fire',x:p.x,y:p.y,h:p.hh||heightAt(p.x,p.y)+10,vx:(R()-.5)*25,vy:(R()-.5)*25,vh:20,life:.3,max:.4});
     if((p.proj==='rocket'||p.proj==='ripple')&&R()<.8)fx.push({t:'p',k:'smoke',x:p.x,y:p.y,h:p.hh||heightAt(p.x,p.y)+14,vx:0,vy:0,vh:8,life:.6,max:1.6});

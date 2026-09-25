@@ -14,6 +14,8 @@ A 3D real-time strategy game for the browser, inspired by Warzone 2100.
 - Flamer, Pulse Laser, Mantis body, Radar Towers and Radar Turrets, VTOL transports
 - Howitzer Emplacement and Ripple Rocket Battery: giant long-range artillery
 - AI that raids oil derricks, gathers before attacking, attacks in waves and retreats when losing
+- Cyborgs, Commanders, Laser Satellite superweapon, water and bridges, oil drums and artifacts
+- Stances, waypoints, patrols, build hotkeys, research tree screen, quicksave (F5/F9) and autosave
 - Fog of war, synthesized sound effects and voice alerts, unit groups (Ctrl+1-9), save/load
 
 ## Development

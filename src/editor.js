@@ -19,7 +19,7 @@ function edToggle(list,x,y,max){const S=ED.size;const pts=edMirror(x,y).filter(p
 function edClearAround(x,y,r){const S=ED.size;for(let yy=y-r;yy<=y+r;yy++)for(let xx=x-r;xx<=x+r;xx++)if(xx>=2&&yy>=2&&xx<S-2&&yy<S-2&&(xx-x)**2+(yy-y)**2<=r*r)ED.rock[yy*S+xx]=0}
 function edApply(tx,ty,erase,first){
   const S=ED.size;if(tx<0||ty<0||tx>=S||ty>=S)return;
-  if(ED.tool==='rock'||ED.tool==='ground')edBrush(tx,ty,erase?0:(ED.tool==='rock'?1:0));
+  if(ED.tool==='rock'||ED.tool==='ground'||ED.tool==='water')edBrush(tx,ty,erase?0:(ED.tool==='rock'?1:ED.tool==='water'?2:0));
   else if(!first)return;
   else if(ED.tool==='oil'){if(erase){ED.oils=ED.oils.filter(o=>Math.abs(o[0]-tx)>1||Math.abs(o[1]-ty)>1)}else{edToggle(ED.oils,tx,ty,64);for(const o of ED.oils)ED.rock[o[1]*S+o[0]]=0}}
   else if(ED.tool==='start'){if(erase){ED.starts=ED.starts.filter(o=>Math.abs(o[0]-tx)>2||Math.abs(o[1]-ty)>2)}else{const cx=clamp(tx,7,S-8),cy=clamp(ty,7,S-8);edToggle(ED.starts,cx,cy,4);for(const s of ED.starts)edClearAround(s[0],s[1],5)}}
@@ -32,7 +32,7 @@ function edDraw(){
   const T=THEMES[ED.theme],S=ED.size,c=edCell(),ox=Math.floor((edCv.width-c*S)/2),oy=Math.floor((edCv.height-c*S)/2);
   ectx.fillStyle='#07060f';ectx.fillRect(0,0,edCv.width,edCv.height);
   ectx.fillStyle=T.ground;ectx.fillRect(ox,oy,c*S,c*S);
-  ectx.fillStyle=T.rockBase;for(let y=0;y<S;y++)for(let x=0;x<S;x++)if(ED.rock[y*S+x])ectx.fillRect(ox+x*c,oy+y*c,c,c);
+  for(let y=0;y<S;y++)for(let x=0;x<S;x++){const v=ED.rock[y*S+x];if(v){ectx.fillStyle=v===2?'#2d6a8a':T.rockBase;ectx.fillRect(ox+x*c,oy+y*c,c,c)}}
   ectx.strokeStyle='rgba(0,0,0,.15)';ectx.lineWidth=1;ectx.beginPath();for(let k=0;k<=S;k+=8){ectx.moveTo(ox+k*c+.5,oy);ectx.lineTo(ox+k*c+.5,oy+S*c);ectx.moveTo(ox,oy+k*c+.5);ectx.lineTo(ox+S*c,oy+k*c+.5)}ectx.stroke();
   for(const o of ED.oils){const x=ox+(o[0]+.5)*c,y=oy+(o[1]+.5)*c;ectx.fillStyle='#111';ectx.beginPath();ectx.arc(x,y,Math.max(3,c*.7),0,7);ectx.fill();ectx.strokeStyle='#ff9a30';ectx.lineWidth=2;ectx.stroke()}
   ED.starts.forEach((s,i)=>{const x=ox+(s[0]+.5)*c,y=oy+(s[1]+.5)*c;ectx.fillStyle=TEAM[i].css;ectx.beginPath();ectx.arc(x,y,Math.max(8,c*2.2),0,7);ectx.fill();ectx.fillStyle='#111';ectx.font='bold '+Math.max(11,c*2)+'px Verdana';ectx.textAlign='center';ectx.textBaseline='middle';ectx.fillText(i+1,x,y+1)});
@@ -41,7 +41,7 @@ function edResize(){const r=$('eArea').getBoundingClientRect();edCv.width=Math.m
 addEventListener('resize',()=>{if(!$('editor').hidden)edResize()});
 function edChips(el,opts,cur,fn){const b=$(el);b.innerHTML='';for(const[v,t]of opts){const x=document.createElement('button');x.type='button';x.className='chip'+(cur===v?' on':'');x.textContent=t;x.onclick=()=>fn(v);b.appendChild(x)}}
 function edUI(){
-  edChips('eTool',[['rock','Cliff'],['ground','Ground'],['oil','Oil resource'],['start','Start position']],ED.tool,v=>{ED.tool=v;edUI()});
+  edChips('eTool',[['rock','Cliff'],['ground','Ground'],['water','Water'],['oil','Oil resource'],['start','Start position']],ED.tool,v=>{ED.tool=v;edUI()});
   edChips('eBrush',[[1,'Small'],[2,'Medium'],[4,'Large']],ED.brush,v=>{ED.brush=v;edUI()});
   edChips('eSym',[[true,'Mirror to 4 corners'],[false,'Off']],ED.mirror,v=>{ED.mirror=v;edUI()});
   edChips('eTheme',Object.keys(THEMES).map(k=>[k,THEMES[k].name]),ED.theme,v=>{ED.theme=v;edUI();edDraw()});
@@ -52,7 +52,7 @@ function edUI(){
   if(!Object.keys(maps).length)lst.textContent='No saved maps yet.';
   const info=$('eInfo');info.textContent=ED.starts.length+' start positions (2-4 needed) · '+ED.oils.length+' oil resources';
 }
-function edLoad(n){const m=loadCustomMap(n);if(!m)return;ED={size:m.size,theme:m.theme,rock:Uint8Array.from(m.rock,ch=>ch==='1'?1:0),oils:m.oils.map(o=>[...o]),starts:m.starts.map(s=>[...s]),tool:'rock',brush:2,mirror:true,name:n};$('eName').value=n;edUI();edDraw();edMsg('Loaded "'+n+'"')}
+function edLoad(n){const m=loadCustomMap(n);if(!m)return;ED={size:m.size,theme:m.theme,rock:Uint8Array.from(m.rock,ch=>ch==='1'?1:ch==='2'?2:0),oils:m.oils.map(o=>[...o]),starts:m.starts.map(s=>[...s]),tool:'rock',brush:2,mirror:true,name:n};$('eName').value=n;edUI();edDraw();edMsg('Loaded "'+n+'"')}
 function edMsg(t,bad){const m=$('eMsg');m.textContent=t;m.style.color=bad?'#f9a':'#9f9'}
 function edValidate(){const S=ED.size;
   if(ED.starts.length<2)return 'Place at least 2 start positions.';
