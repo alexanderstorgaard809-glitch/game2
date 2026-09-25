@@ -37,7 +37,7 @@ function rebuildPanel(){
       const b=mkBtn(label,'',textIcon(ic,'#ffb86b'),tip,()=>{for(const u of fighters)u.stance=s;panelKey='';sfx('click')});if(cur===s)b.classList.add('on')}}
   if(own.some(e=>e.kind==='u'))mkBtn('Patrol','',textIcon('↔','#6cf'),'Click a point: units patrol between here and there (X). Shift+right-click adds waypoints.',()=>{placing={type:'patrol'};msg('Click where the units should patrol to',2)},null,'X');
   if(own.length===1&&own[0].kind==='b'){const f=own[0];
-    if(f.built>=1&&f.type==='lassat'){const b=mkBtn('Fire Laser Satellite','',textIcon('✦','#ff6b6b'),'Strike any spot on the map',()=>{if((f.charge||0)<LASSAT_CHARGE)return deny('The satellite is still charging');placing={type:'lassat',id:f.id};msg('Click anywhere on the map to fire',3)});
+    if(f.built>=1&&f.type==='lassat'){const b=mkBtn('Fire Laser Satellite','',textIcon('✦','#ff6b6b'),'Strike any spot on the map',()=>{if((f.charge||0)<LASSAT_CHARGE)return deny('The satellite is still charging');placing={type:'lassatFire',id:f.id};msg('Click anywhere on the map to fire',3)});
       refs.push(()=>{b.querySelector('.prog').style.width=((f.charge||0)/LASSAT_CHARGE*100)+'%';b.classList.toggle('dis',(f.charge||0)<LASSAT_CHARGE);b.querySelector('.q').textContent=(f.charge||0)<LASSAT_CHARGE?fmtTime(LASSAT_CHARGE-(f.charge||0)):'READY'})}
     if(f.built>=1&&(f.type==='factory'||f.type==='cyborgFactory')){
       for(const tp of f.type==='cyborgFactory'?CYBORG_TPL:templates[0].filter(t=>t.prop!=='legs')){if(!designOk(0,tp))continue;const st=calcStats(tp),key=dkey(tp);
@@ -66,9 +66,10 @@ function rebuildPanel(){
     else{const c={};for(const e of sel){const n=unitLabel(e);c[n]=(c[n]||0)+1}t=sel.length+' selected: '+Object.entries(c).map(([k,v])=>v+'× '+k).join(', ')}
     $('selTitle').textContent=t});
 }
+function fitButtons(){const b=$('buttons');b.classList.remove('compact');if(b.scrollHeight>b.clientHeight+4)b.classList.add('compact')}
 function updateHud(){
   const key=sel.map(e=>e.id+':'+(e.built>=1?1:0)+(e.stance||'')).join(',')+'|'+Object.keys(tech[0]).join()+'|'+templates[0].map(dkey).join();
-  if(key!==panelKey){panelKey=key;rebuildPanel()}
+  if(key!==panelKey){panelKey=key;rebuildPanel();fitButtons()}
   for(const f of refs)f();
   $('power').textContent=Math.floor(power[0]);$('pbar').firstChild.style.width=Math.min(100,power[0]/20)+'%';
   $('income').textContent='+'+incomeOf(0).toFixed(1)+'/s';
@@ -286,7 +287,7 @@ ui.addEventListener('contextmenu',e=>e.preventDefault());
 ui.addEventListener('mousedown',e=>{if(state!=='play'||uiOpen())return;audioInit();
   if(e.button===1){e.preventDefault();rot={x:e.clientX,y:e.clientY};return}
   const w=screenToWorld(e.clientX,e.clientY);
-  if(e.button===0){if(placing){if(w){if(placing.type==='lassat'){fireLassat(byId.get(placing.id),w.x,w.y);placing=null}else if(placing.type==='patrol'){setPatrol(w.x,w.y);placing=null}else if(placing.type==='wall')placing.start=[tileOf(w.x),tileOf(w.y)];else tryPlace(w.x,w.y,e.shiftKey)}return}drag={x0:e.clientX,y0:e.clientY,x1:e.clientX,y1:e.clientY,active:false,shift:e.shiftKey}}
+  if(e.button===0){if(placing){if(w){if(placing.type==='lassatFire'){fireLassat(byId.get(placing.id),w.x,w.y);placing=null}else if(placing.type==='patrol'){setPatrol(w.x,w.y);placing=null}else if(placing.type==='wall')placing.start=[tileOf(w.x),tileOf(w.y)];else tryPlace(w.x,w.y,e.shiftKey)}return}drag={x0:e.clientX,y0:e.clientY,x1:e.clientX,y1:e.clientY,active:false,shift:e.shiftKey}}
   else if(e.button===2){if(placing){if(placing.type==='patrol'&&w)setPatrol(w.x,w.y);placing=null;return}const t=pickAt(e.clientX,e.clientY);if(w||t)rightClick(w?w.x:t.x,w?w.y:t.y,t,e.shiftKey)}});
 ui.addEventListener('wheel',e=>{e.preventDefault();cam.dist*=e.deltaY>0?1.1:1/1.1},{passive:false});
 addEventListener('mousemove',e=>{mouse.x=e.clientX;mouse.y=e.clientY;mouse.in=true;
@@ -359,6 +360,7 @@ addEventListener('keydown',e=>{const k=e.key.toLowerCase();keys[k]=true;
   if(k==='h'){const hq=findHQ(0);if(hq){cam.x=hq.x;cam.y=hq.y}}
   if(k==='g')sel=ents.filter(u=>selectable(u)&&!u.st.util);
   if(k.startsWith('arrow')||k===' ')e.preventDefault()});
+addEventListener('resize',()=>{if(state==='play')fitButtons()});
 addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
 addEventListener('blur',()=>{for(const k in keys)keys[k]=false});
 function scrollCam(dt){const s=cam.dist*1.1*dt;let mx=0,my=0;

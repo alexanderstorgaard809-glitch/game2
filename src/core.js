@@ -2,7 +2,7 @@
 // =====================================================================
 // CORE: definitions, map, pathfinding, entities and simulation
 // =====================================================================
-const TILE=40,HUDH=170,HSTEP=20,AIR_H=80;
+const TILE=40,HUDH=192,HSTEP=20,AIR_H=80;
 const unitCap=()=>game.cap||60;
 let MW=64,MH=64,WW=MW*TILE,WH=MH*TILE,HN=MW*2+1;
 function setMapSize(n){MW=MH=n;WW=WH=n*TILE;HN=n*2+1}

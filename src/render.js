@@ -298,7 +298,7 @@ function drawOverlay(rt){
   uctx.setLineDash([]);
   const ring=(x,y,r,c)=>{const p=worldToScreen(x,heightAt(x,y),y),pr=r*pxPerUnit(x,heightAt(x,y),y);uctx.strokeStyle=c;uctx.lineWidth=2;uctx.beginPath();uctx.ellipse(p.x,p.y,pr,pr*.6,0,0,7);uctx.stroke()};
   for(const f of fx)if(f.t==='aim'&&shownAt(f.x,f.y))ring(f.x,f.y,240*(.6+.4*Math.abs(Math.sin(rt*6))),'rgba(255,60,60,.9)');
-  if(placing&&placing.type==='lassat'&&mouse.world)ring(mouse.world.x,mouse.world.y,240,'rgba(255,90,90,.9)');
+  if(placing&&placing.type==='lassatFire'&&mouse.world)ring(mouse.world.x,mouse.world.y,240,'rgba(255,90,90,.9)');
   if(placing&&placing.type==='patrol'&&mouse.world)ring(mouse.world.x,mouse.world.y,20,'rgba(100,200,255,.9)');
   for(const m of markers){const p=worldToScreen(m.x,heightAt(m.x,m.y),m.y),k=m.life/.5;uctx.strokeStyle=m.c;uctx.globalAlpha=k;uctx.lineWidth=2;uctx.beginPath();uctx.ellipse(p.x,p.y,18*k+4,(18*k+4)*.55,0,0,7);uctx.stroke();uctx.globalAlpha=1}
   if(drag&&drag.active){uctx.strokeStyle='#8f8';uctx.lineWidth=1;uctx.fillStyle='rgba(120,255,120,.1)';const x=Math.min(drag.x0,drag.x1),y=Math.min(drag.y0,drag.y1),w=Math.abs(drag.x1-drag.x0),h=Math.abs(drag.y1-drag.y0);uctx.fillRect(x,y,w,h);uctx.strokeRect(x+.5,y+.5,w,h)}

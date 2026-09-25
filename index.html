@@ -9,7 +9,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#07060f;font-family:Ve
 [hidden]{display:none!important}
 #view,#ui{position:absolute;left:0;top:0;display:block}
 #ui{z-index:2}
-#hud{position:absolute;left:0;right:0;bottom:0;height:170px;display:flex;gap:8px;padding:8px;box-sizing:border-box;background:linear-gradient(#1f1a55,#0c0a26);border-top:2px solid #6a5fd0;z-index:3}
+#hud{position:absolute;left:0;right:0;bottom:0;height:192px;display:flex;gap:8px;padding:8px;box-sizing:border-box;background:linear-gradient(#1f1a55,#0c0a26);border-top:2px solid #6a5fd0;z-index:3}
 .panel{background:linear-gradient(135deg,#2c2878,#1b1850);border:2px solid #6a5fd0;border-radius:8px;padding:8px;box-sizing:border-box;box-shadow:inset 0 0 12px rgba(0,0,0,.5)}
 #left{width:200px;flex:none;display:flex;flex-direction:column;gap:5px;font-size:12px}
 .row{display:flex;justify-content:space-between;align-items:baseline}
@@ -23,7 +23,9 @@ html,body{margin:0;height:100%;overflow:hidden;background:#07060f;font-family:Ve
 .sb:hover,.sb:focus-visible{border-color:#ffe066;outline:none}
 #center{flex:1;overflow:hidden;min-width:0;display:flex;flex-direction:column}
 #selTitle{font-weight:bold;margin-bottom:6px;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#buttons{display:flex;flex-wrap:wrap;gap:6px;overflow-y:auto;min-height:0;flex:1;align-content:flex-start}
+#buttons{display:flex;flex-wrap:wrap;gap:6px;overflow-y:auto;min-height:0;flex:1;align-content:flex-start;scrollbar-color:#7d72e8 #14113a;scrollbar-width:thin}
+#buttons::-webkit-scrollbar{width:10px}#buttons::-webkit-scrollbar-thumb{background:#7d72e8;border-radius:5px}#buttons::-webkit-scrollbar-track{background:#14113a}
+#buttons.compact{gap:4px}#buttons.compact .btn{width:76px;height:64px;font-size:9px;border-radius:8px}#buttons.compact .btn img{width:46px;height:30px}
 .note{font-size:12px;color:#bbc;padding:6px}
 .btn{width:90px;height:92px;background:radial-gradient(circle at 50% 35%,#4a44b0,#221e66);border:2px solid #7d72e8;border-radius:10px;color:#fff;font-size:10px;line-height:1.2;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;position:relative;overflow:hidden;box-sizing:border-box;padding:2px}
 .btn:hover{border-color:#ffe066}
@@ -34,7 +36,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#07060f;font-family:Ve
 .btn .cost{color:#ffe066}
 .btn .q{position:absolute;top:3px;right:6px;color:#8f8;font-weight:bold;font-size:14px}
 .btn .prog{position:absolute;left:0;bottom:0;height:5px;width:0;background:#8f8}
-#mini{width:154px;height:154px;background:#000;border:2px solid #6a5fd0;border-radius:6px;cursor:crosshair;flex:none}
+#mini{width:154px;height:154px;align-self:center;background:#000;border:2px solid #6a5fd0;border-radius:6px;cursor:crosshair;flex:none}
 #msg{position:absolute;top:14px;left:50%;transform:translateX(-50%);font-size:17px;font-weight:bold;text-shadow:0 0 5px #000,0 0 2px #000;pointer-events:none;text-align:center;color:#ffe9a0;z-index:4;width:60%}
 #obj{position:absolute;top:10px;left:10px;z-index:4;background:rgba(20,16,60,.85);border:1px solid #6a5fd0;border-radius:8px;padding:8px 12px;font-size:12px;max-width:320px;line-height:1.7;pointer-events:none}
 #obj b{color:#ffe066}
@@ -189,7 +191,7 @@ function(t,e){"object"==typeof exports&&"undefined"!=typeof module?e(exports):"f
 // =====================================================================
 // CORE: definitions, map, pathfinding, entities and simulation
 // =====================================================================
-const TILE=40,HUDH=170,HSTEP=20,AIR_H=80;
+const TILE=40,HUDH=192,HSTEP=20,AIR_H=80;
 const unitCap=()=>game.cap||60;
 let MW=64,MH=64,WW=MW*TILE,WH=MH*TILE,HN=MW*2+1;
 function setMapSize(n){MW=MH=n;WW=WH=n*TILE;HN=n*2+1}
@@ -1300,7 +1302,7 @@ function drawOverlay(rt){
   uctx.setLineDash([]);
   const ring=(x,y,r,c)=>{const p=worldToScreen(x,heightAt(x,y),y),pr=r*pxPerUnit(x,heightAt(x,y),y);uctx.strokeStyle=c;uctx.lineWidth=2;uctx.beginPath();uctx.ellipse(p.x,p.y,pr,pr*.6,0,0,7);uctx.stroke()};
   for(const f of fx)if(f.t==='aim'&&shownAt(f.x,f.y))ring(f.x,f.y,240*(.6+.4*Math.abs(Math.sin(rt*6))),'rgba(255,60,60,.9)');
-  if(placing&&placing.type==='lassat'&&mouse.world)ring(mouse.world.x,mouse.world.y,240,'rgba(255,90,90,.9)');
+  if(placing&&placing.type==='lassatFire'&&mouse.world)ring(mouse.world.x,mouse.world.y,240,'rgba(255,90,90,.9)');
   if(placing&&placing.type==='patrol'&&mouse.world)ring(mouse.world.x,mouse.world.y,20,'rgba(100,200,255,.9)');
   for(const m of markers){const p=worldToScreen(m.x,heightAt(m.x,m.y),m.y),k=m.life/.5;uctx.strokeStyle=m.c;uctx.globalAlpha=k;uctx.lineWidth=2;uctx.beginPath();uctx.ellipse(p.x,p.y,18*k+4,(18*k+4)*.55,0,0,7);uctx.stroke();uctx.globalAlpha=1}
   if(drag&&drag.active){uctx.strokeStyle='#8f8';uctx.lineWidth=1;uctx.fillStyle='rgba(120,255,120,.1)';const x=Math.min(drag.x0,drag.x1),y=Math.min(drag.y0,drag.y1),w=Math.abs(drag.x1-drag.x0),h=Math.abs(drag.y1-drag.y0);uctx.fillRect(x,y,w,h);uctx.strokeRect(x+.5,y+.5,w,h)}
@@ -1371,7 +1373,7 @@ function rebuildPanel(){
       const b=mkBtn(label,'',textIcon(ic,'#ffb86b'),tip,()=>{for(const u of fighters)u.stance=s;panelKey='';sfx('click')});if(cur===s)b.classList.add('on')}}
   if(own.some(e=>e.kind==='u'))mkBtn('Patrol','',textIcon('↔','#6cf'),'Click a point: units patrol between here and there (X). Shift+right-click adds waypoints.',()=>{placing={type:'patrol'};msg('Click where the units should patrol to',2)},null,'X');
   if(own.length===1&&own[0].kind==='b'){const f=own[0];
-    if(f.built>=1&&f.type==='lassat'){const b=mkBtn('Fire Laser Satellite','',textIcon('✦','#ff6b6b'),'Strike any spot on the map',()=>{if((f.charge||0)<LASSAT_CHARGE)return deny('The satellite is still charging');placing={type:'lassat',id:f.id};msg('Click anywhere on the map to fire',3)});
+    if(f.built>=1&&f.type==='lassat'){const b=mkBtn('Fire Laser Satellite','',textIcon('✦','#ff6b6b'),'Strike any spot on the map',()=>{if((f.charge||0)<LASSAT_CHARGE)return deny('The satellite is still charging');placing={type:'lassatFire',id:f.id};msg('Click anywhere on the map to fire',3)});
       refs.push(()=>{b.querySelector('.prog').style.width=((f.charge||0)/LASSAT_CHARGE*100)+'%';b.classList.toggle('dis',(f.charge||0)<LASSAT_CHARGE);b.querySelector('.q').textContent=(f.charge||0)<LASSAT_CHARGE?fmtTime(LASSAT_CHARGE-(f.charge||0)):'READY'})}
     if(f.built>=1&&(f.type==='factory'||f.type==='cyborgFactory')){
       for(const tp of f.type==='cyborgFactory'?CYBORG_TPL:templates[0].filter(t=>t.prop!=='legs')){if(!designOk(0,tp))continue;const st=calcStats(tp),key=dkey(tp);
@@ -1400,9 +1402,10 @@ function rebuildPanel(){
     else{const c={};for(const e of sel){const n=unitLabel(e);c[n]=(c[n]||0)+1}t=sel.length+' selected: '+Object.entries(c).map(([k,v])=>v+'× '+k).join(', ')}
     $('selTitle').textContent=t});
 }
+function fitButtons(){const b=$('buttons');b.classList.remove('compact');if(b.scrollHeight>b.clientHeight+4)b.classList.add('compact')}
 function updateHud(){
   const key=sel.map(e=>e.id+':'+(e.built>=1?1:0)+(e.stance||'')).join(',')+'|'+Object.keys(tech[0]).join()+'|'+templates[0].map(dkey).join();
-  if(key!==panelKey){panelKey=key;rebuildPanel()}
+  if(key!==panelKey){panelKey=key;rebuildPanel();fitButtons()}
   for(const f of refs)f();
   $('power').textContent=Math.floor(power[0]);$('pbar').firstChild.style.width=Math.min(100,power[0]/20)+'%';
   $('income').textContent='+'+incomeOf(0).toFixed(1)+'/s';
@@ -1620,7 +1623,7 @@ ui.addEventListener('contextmenu',e=>e.preventDefault());
 ui.addEventListener('mousedown',e=>{if(state!=='play'||uiOpen())return;audioInit();
   if(e.button===1){e.preventDefault();rot={x:e.clientX,y:e.clientY};return}
   const w=screenToWorld(e.clientX,e.clientY);
-  if(e.button===0){if(placing){if(w){if(placing.type==='lassat'){fireLassat(byId.get(placing.id),w.x,w.y);placing=null}else if(placing.type==='patrol'){setPatrol(w.x,w.y);placing=null}else if(placing.type==='wall')placing.start=[tileOf(w.x),tileOf(w.y)];else tryPlace(w.x,w.y,e.shiftKey)}return}drag={x0:e.clientX,y0:e.clientY,x1:e.clientX,y1:e.clientY,active:false,shift:e.shiftKey}}
+  if(e.button===0){if(placing){if(w){if(placing.type==='lassatFire'){fireLassat(byId.get(placing.id),w.x,w.y);placing=null}else if(placing.type==='patrol'){setPatrol(w.x,w.y);placing=null}else if(placing.type==='wall')placing.start=[tileOf(w.x),tileOf(w.y)];else tryPlace(w.x,w.y,e.shiftKey)}return}drag={x0:e.clientX,y0:e.clientY,x1:e.clientX,y1:e.clientY,active:false,shift:e.shiftKey}}
   else if(e.button===2){if(placing){if(placing.type==='patrol'&&w)setPatrol(w.x,w.y);placing=null;return}const t=pickAt(e.clientX,e.clientY);if(w||t)rightClick(w?w.x:t.x,w?w.y:t.y,t,e.shiftKey)}});
 ui.addEventListener('wheel',e=>{e.preventDefault();cam.dist*=e.deltaY>0?1.1:1/1.1},{passive:false});
 addEventListener('mousemove',e=>{mouse.x=e.clientX;mouse.y=e.clientY;mouse.in=true;
@@ -1693,6 +1696,7 @@ addEventListener('keydown',e=>{const k=e.key.toLowerCase();keys[k]=true;
   if(k==='h'){const hq=findHQ(0);if(hq){cam.x=hq.x;cam.y=hq.y}}
   if(k==='g')sel=ents.filter(u=>selectable(u)&&!u.st.util);
   if(k.startsWith('arrow')||k===' ')e.preventDefault()});
+addEventListener('resize',()=>{if(state==='play')fitButtons()});
 addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
 addEventListener('blur',()=>{for(const k in keys)keys[k]=false});
 function scrollCam(dt){const s=cam.dist*1.1*dt;let mx=0,my=0;
