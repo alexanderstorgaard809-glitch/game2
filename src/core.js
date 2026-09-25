@@ -38,6 +38,8 @@ const WEAPONS={
   flamer:{name:'Flamer',cost:30,dmg:7,rof:.18,range:115,splash:26,proj:'flame',cls:'fire',req:'flamer',noVtol:true,desc:'Short-range flamethrower. Burns groups of enemies.'},
   laser:{name:'Pulse Laser',cost:90,dmg:30,rof:1.1,range:290,proj:'laser',cls:'laser',req:'laser',air:true,desc:'Long-range laser that hits instantly. Can also hit VTOLs.'},
   sensor:{name:'Radar Turret',cost:35,util:'sensor',desc:'Sees very far. Your artillery can fire at everything it spots.'},
+  howitzer:{name:'Howitzer',cost:0,dmg:85,rof:7,range:1150,minRange:220,splash:75,proj:'shell',cls:'cannon',heavy:true,structOnly:true},
+  ripple:{name:'Ripple Rockets',cost:0,dmg:45,rof:13,range:1900,minRange:320,splash:55,proj:'ripple',cls:'rocket',heavy:true,salvo:6,structOnly:true},
   construct:{name:'Construction',cost:15,util:'truck',noVtol:true,desc:'Builds and repairs structures.'},
   repair:{name:'Repair Turret',cost:40,util:'repair',noVtol:true,heal:14,range:90,desc:'Repairs nearby damaged units.'},
   transport:{name:'Transport Bay',cost:40,util:'transport',vtolOnly:true,req:'vtol',cap:6,desc:'VTOL only. Carries up to 6 ground units over cliffs.'}
@@ -55,10 +57,12 @@ const BDEF={
   mortarPit:{name:'Mortar Pit',w:1,h:1,hp:800,cost:200,time:15,weapon:'mortar',rangeAdd:20,gunH:10,req:'mortar',desc:'Long-range artillery emplacement.'},
   aaSite:{name:'AA Site',w:1,h:1,hp:700,cost:150,time:12,weapon:'aa',rangeAdd:20,gunH:16,req:'aa',desc:'Anti-air guns against VTOLs.'},
   repairFac:{name:'Repair Facility',w:2,h:2,hp:900,cost:200,time:18,req:'repairfac',heal:32,range:110,desc:'Repairs nearby units. Send damaged units here.'},
+  howitzer:{name:'Howitzer Emplacement',w:2,h:2,hp:1600,cost:450,time:30,weapon:'howitzer',gunH:30,req:'howitzer',desc:'Huge long-range gun. Fires at anything you can see, far across the map.'},
+  ripple:{name:'Ripple Rocket Battery',w:3,h:3,hp:2600,cost:900,time:45,weapon:'ripple',gunH:40,req:'ripple',desc:'Gigantic rocket battery. Fires 6 rockets at a time over an enormous range.'},
   sensorTower:{name:'Radar Tower',w:1,h:1,hp:600,cost:100,time:10,desc:'Sees very far. Your artillery can fire at everything it spots.'},
   vtolPad:{name:'VTOL Pad',w:1,h:1,hp:500,cost:100,time:8,req:'vtol',desc:'VTOLs land here to rearm and repair.'}
 };
-const BUILD_LIST=['factory','research','derrick','wall','sensorTower','tower','bunker','hardpoint','mortarPit','aaSite','repairFac','vtolPad'];
+const BUILD_LIST=['factory','research','derrick','wall','sensorTower','tower','bunker','hardpoint','mortarPit','aaSite','howitzer','ripple','repairFac','vtolPad'];
 const DEFENSES=['tower','bunker','hardpoint','mortarPit','aaSite'];
 const RESEARCH=[
   {id:'mg',name:'Hardened MG Bullets',desc:'+30% machinegun and AA damage',cost:120,time:18},
@@ -77,6 +81,8 @@ const RESEARCH=[
   {id:'mantis',name:'Mantis Body',desc:'Unlocks the advanced Mantis body',cost:300,time:35,req:'python'},
   {id:'laser',name:'Pulse Laser',desc:'Unlocks the long-range Pulse Laser',cost:320,time:40,req:'rocket'},
   {id:'optics',name:'Thermal Imaging',desc:'+25% sight range. Great at night and in bad weather',cost:180,time:22},
+  {id:'howitzer',name:'Howitzer',desc:'Unlocks the long-range Howitzer Emplacement',cost:350,time:40,req:'mortar'},
+  {id:'ripple',name:'Ripple Rockets',desc:'Unlocks the giant Ripple Rocket Battery',cost:600,time:60,req:'howitzer'},
   {id:'armor',name:'Composite Alloys',desc:'+35% armor for everything',cost:250,time:30},
   {id:'oil',name:'Improved Derricks',desc:'+50% oil output',cost:200,time:25},
   {id:'engine',name:'Improved Engines',desc:'+20% unit speed',cost:150,time:20}
@@ -145,7 +151,7 @@ function carve(x0,y0,x1,y1,r){const n=Math.ceil(Math.hypot(x1-x0,y1-y0))*2;for(l
 // the map is mirrored into four corners; these give the bottom-left quarter
 const baseTile=()=>[11,MH-11];
 function oilQuarter(){const S=MW,b=baseTile(),o=[[b[0]-5,b[1]-6],[b[0]+4,b[1]+5],[b[0]+7,b[1]-5],[b[0]-7,b[1]+5]];
-  const f=[[.34,.63],[.42,.81],[.47,.53],[.19,.53]];if(S>64)f.push([.27,.72],[.12,.66],[.4,.93]);if(S>96)f.push([.22,.88],[.33,.57]);
+  const f=[[.34,.63],[.42,.81],[.47,.53],[.19,.53]];if(S>64)f.push([.27,.72],[.12,.66],[.4,.93]);if(S>96)f.push([.22,.88],[.33,.57]);if(S>128)f.push([.3,.8],[.14,.6],[.45,.7],[.08,.8],[.38,.97]);
   for(const[fx,fy]of f)o.push([Math.round(fx*S),Math.round(fy*S)]);return o}
 function genMap(seed,tid,clears,custom){
   theme=THEMES[tid];themeId=tid;mapSeed=seed;
@@ -297,10 +303,12 @@ function addDecal(x,y,r){const d={x,y,r:r+R()*6};decals.push(d);if(world){d.mesh
   if(decals.length>70){const o=decals.shift();if(o.mesh)world.remove(o.mesh)}}
 
 // ---------- COMBAT ----------
-function findTarget(e,range,minR=0){let best=null,bs=1e9;
+function spottedBy(team,o){for(const x of ents)if(x.team===team&&x.hp>0&&!x.inside&&Math.hypot(x.x-o.x,x.y-o.y)<baseSight(x))return true;return false}
+function findTarget(e,range,minR=0){let best=null,bs=1e9;const longRange=range>500&&e.team!==0;
   for(const o of ents){if(!hostile(e.team,o.team)||o.hp<=0||o.inside||o.stranded||(e.team===0&&!shown(o))||!canHit(e,o))continue;const d=edgeDist(e,o);if(d>range||d<minR)continue;
-    const s=d+(o.kind==='b'?(o.type==='wall'?220:80):0)+(isTruck(o)?30:0);if(s<bs){bs=s;best=o}}return best}
-const PROJ_SPEED={mg:950,cannon:560,rocket:620,mortar:330,flak:800,bomb:260,flame:420};
+    const s=d+(o.kind==='b'?(o.type==='wall'?220:80):0)+(isTruck(o)?30:0);if(s<bs){if(longRange&&!spottedBy(e.team,o))continue;bs=s;best=o}}return best}
+const PROJ_SPEED={mg:950,cannon:560,rocket:620,mortar:330,flak:800,bomb:260,flame:420,shell:420,ripple:520};
+const ARC=p=>p==='mortar'||p==='bomb'||p==='shell'||p==='ripple';
 function fire(e,t){
   const w=wOf(e),dmg=dmgOf(e);
   const gh=e.kind==='b'?BDEF[e.type].gunH:e.st.gunH+(e.h||0),len=w.proj==='cannon'?24:w.proj==='bomb'?0:14;
@@ -308,9 +316,9 @@ function fire(e,t){
   if(w.proj==='laser'){fx.push({t:'beam',x0:bx,y0:by,h0:gh,x1:t.x,y1:t.y,h1:(t.h||0)+(t.kind==='b'?20:8),life:.18,max:.18});sfx('laser',e.x,e.y);
     e.cd=w.rof*(.9+R()*.2)/(e.kind==='u'?1+.06*e.rank:1);if(isAir(e))e.ammo--;damage(t,dmg,e.team,e);return}
   const p={x:bx,y:by,h:gh,tid:t.id,th:t.h||0,tx:t.x,ty:t.y,ox:(R()-.5)*t.r*.8,oy:(R()-.5)*t.r*.8,sp:PROJ_SPEED[w.proj],dmg,proj:w.proj,team:e.team,src:e.id,splash:w.splash||0,air:isAir(t)};
-  if(w.proj==='mortar'||w.proj==='bomb'){const sc=w.proj==='bomb'?20:30;p.tid=0;p.tx=t.x+(R()-.5)*sc;p.ty=t.y+(R()-.5)*sc;p.th=0;p.d0=Math.max(1,Math.hypot(p.tx-bx,p.ty-by))}
-  if(world){p.mesh=makeProjMesh(p.proj);world.add(p.mesh)}
-  projs.push(p);
+  if(ARC(w.proj)){const sc=w.proj==='bomb'?20:w.proj==='mortar'?30:70;p.tid=0;p.tx=t.x+(R()-.5)*sc;p.ty=t.y+(R()-.5)*sc;p.th=0;p.d0=Math.max(1,Math.hypot(p.tx-bx,p.ty-by))}
+  const shots=[p];for(let i=1;i<(w.salvo||1);i++){const q={...p,tx:t.x+(R()-.5)*140,ty:t.y+(R()-.5)*140,sp:p.sp*(.85+R()*.3)};q.d0=Math.max(1,Math.hypot(q.tx-bx,q.ty-by));shots.push(q)}
+  for(const q of shots){if(world){q.mesh=makeProjMesh(q.proj);world.add(q.mesh)}projs.push(q)}
   if(w.proj!=='bomb')fx.push({t:'flash',x:bx,y:by,h:gh,life:.07,max:.07,size:w.proj==='cannon'||w.proj==='mortar'?9:5});
   sfx(w.proj,e.x,e.y);
   e.cd=w.rof*(.9+R()*.2)/(e.kind==='u'?1+.06*e.rank:1);
@@ -468,12 +476,12 @@ function update(dt){
     if(blocked(tileOf(u.x),tileOf(u.y))){const f=nearestFree(tileOf(u.x),tileOf(u.y),tileOf(u.x),tileOf(u.y));if(f){u.x+=((f[0]+.5)*TILE-u.x)*Math.min(1,dt*6);u.y+=((f[1]+.5)*TILE-u.y)*Math.min(1,dt*6)}}}}
   for(const p of projs){const t=p.tid?byId.get(p.tid):null;if(t){p.tx=t.x+p.ox;p.ty=t.y+p.oy;p.th=t.h||0}
     if(p.proj==='flame')for(let k=0;k<2;k++)fx.push({t:'p',k:'fire',x:p.x,y:p.y,h:p.hh||heightAt(p.x,p.y)+10,vx:(R()-.5)*25,vy:(R()-.5)*25,vh:20,life:.3,max:.4});
-    if(p.proj==='rocket'&&R()<.8)fx.push({t:'p',k:'smoke',x:p.x,y:p.y,h:p.hh||heightAt(p.x,p.y)+14,vx:0,vy:0,vh:8,life:.6,max:1.6});
+    if((p.proj==='rocket'||p.proj==='ripple')&&R()<.8)fx.push({t:'p',k:'smoke',x:p.x,y:p.y,h:p.hh||heightAt(p.x,p.y)+14,vx:0,vy:0,vh:8,life:.6,max:1.6});
     const dx=p.tx-p.x,dy=p.ty-p.y,d=Math.hypot(dx,dy),s=p.sp*dt;
     if(d<=s){p.dead=true;if(p.mesh)world.remove(p.mesh);const src=byId.get(p.src);
-      if(p.proj==='mortar'||p.proj==='bomb'||p.proj==='flame'){for(const o of ents)if(hostile(p.team,o.team)&&o.hp>0&&!isAir(o)&&!o.stranded&&!o.inside&&edgeDist({x:p.tx,y:p.ty},o)<=p.splash)damage(o,p.dmg*(o.kind==='b'?1:.85),p.team,src);
+      if(ARC(p.proj)||p.proj==='flame'){for(const o of ents)if(hostile(p.team,o.team)&&o.hp>0&&!isAir(o)&&!o.stranded&&!o.inside&&edgeDist({x:p.tx,y:p.ty},o)<=p.splash)damage(o,p.dmg*(o.kind==='b'?1:.85),p.team,src);
         if(p.proj==='flame'){for(let k=0;k<5;k++)fx.push({t:'p',k:'fire',x:p.tx+(R()-.5)*30,y:p.ty+(R()-.5)*30,h:heightAt(p.tx,p.ty)+6,vx:(R()-.5)*40,vy:(R()-.5)*40,vh:30+R()*50,life:.5,max:.6})}
-        else{boom(p.tx,p.ty,16,22);addDecal(p.tx,p.ty,14);sfx('boom',p.tx,p.ty)}}
+        else{const big=p.proj==='shell'||p.proj==='ripple';boom(p.tx,p.ty,big?26:16,big?34:22);addDecal(p.tx,p.ty,big?24:14);sfx(big?'bigboom':'boom',p.tx,p.ty)}}
       else if(t)damage(t,p.dmg*(p.air&&p.proj==='mg'?.6:1),p.team,src);
       const gh=heightAt(p.tx,p.ty)+(p.th||0);
       if(p.proj==='cannon'||p.proj==='rocket'){boom(p.tx,p.ty,8,10,gh+8);sfx('hit',p.tx,p.ty);if(R()<.3&&!p.th)addDecal(p.tx,p.ty,6)}
@@ -491,7 +499,7 @@ function update(dt){
 
 // ---------- FOG OF WAR ----------
 function sightOf(e){return baseSight(e)*WEATHER[weather].sight*(tech[e.team]&&tech[e.team].optics?1.25:1)}
-function baseSight(e){if(e.kind==='u'&&e.st.util==='sensor')return 640;if(e.type==='sensorTower')return 720;if(e.kind==='u')return e.st.air?330:e.d.weapon==='mortar'?300:270;return{hq:380,tower:320,hardpoint:320,aaSite:320,bunker:260,mortarPit:280,wall:90}[e.type]||210}
+function baseSight(e){if(e.kind==='u'&&e.st.util==='sensor')return 640;if(e.type==='sensorTower')return 720;if(e.kind==='u')return e.st.air?330:e.d.weapon==='mortar'?300:270;return{howitzer:300,ripple:300,hq:380,tower:320,hardpoint:320,aaSite:320,bunker:260,mortarPit:280,wall:90}[e.type]||210}
 function updateFog(){visible.fill(0);
   for(const e of ents){if(hostile(0,e.team)||e.hp<=0||e.stranded||e.inside)continue;const r=sightOf(e)/TILE,cx=e.x/TILE,cy=e.y/TILE;
     for(let y=Math.max(0,Math.floor(cy-r));y<=Math.min(MH-1,Math.ceil(cy+r));y++)for(let x=Math.max(0,Math.floor(cx-r));x<=Math.min(MW-1,Math.ceil(cx+r));x++)if((x+.5-cx)**2+(y+.5-cy)**2<=r*r){visible[idx(x,y)]=1;explored[idx(x,y)]=1}}

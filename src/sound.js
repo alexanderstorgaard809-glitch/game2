@@ -8,7 +8,7 @@ function audioInit(){if(SFX.ctx)return;try{const C=window.AudioContext||window.w
   const lfo=c.createOscillator(),lg=c.createGain();lfo.frequency.value=.13;lg.gain.value=160;lfo.connect(lg);lg.connect(f.frequency);lfo.start()}catch(e){SFX.ctx=null}}
 function nz(t,dur,type,f0,f1,q,gain){const c=SFX.ctx,s=c.createBufferSource();s.buffer=SFX.noise;const f=c.createBiquadFilter();f.type=type;f.frequency.setValueAtTime(f0,t);f.frequency.exponentialRampToValueAtTime(f1,t+dur);f.Q.value=q;const g=c.createGain();g.gain.setValueAtTime(gain,t);g.gain.exponentialRampToValueAtTime(.001,t+dur);s.connect(f);f.connect(g);g.connect(SFX.master);s.start(t,Math.random()*1.5);s.stop(t+dur+.05)}
 function tn(t,dur,type,f0,f1,gain){const c=SFX.ctx,o=c.createOscillator();o.type=type;o.frequency.setValueAtTime(f0,t);if(f1!==f0)o.frequency.exponentialRampToValueAtTime(f1,t+dur);const g=c.createGain();g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(gain,t+.01);g.gain.exponentialRampToValueAtTime(.001,t+dur);o.connect(g);g.connect(SFX.master);o.start(t);o.stop(t+dur+.05)}
-const GAP={flame:.12,laser:.1,mg:.06,cannon:.08,rocket:.1,mortar:.12,flak:.08,bomb:.15,hit:.05,boom:.05,bigboom:.1};
+const GAP={shell:.3,ripple:.3,flame:.12,laser:.1,mg:.06,cannon:.08,rocket:.1,mortar:.12,flak:.08,bomb:.15,hit:.05,boom:.05,bigboom:.1};
 function sfx(n,x,y){if(!SFX.ctx||!SFX.on)return;const c=SFX.ctx,t=c.currentTime;if(t-(SFX.last[n]||0)<(GAP[n]||.03))return;
   let v=1;if(x!==undefined){v=Math.max(0,1-Math.hypot(x-cam.x,y-cam.y)/1700)*Math.min(1,700/cam.dist);if(v<.03)return}
   SFX.last[n]=t;
@@ -18,6 +18,8 @@ function sfx(n,x,y){if(!SFX.ctx||!SFX.on)return;const c=SFX.ctx,t=c.currentTime;
   case 'rocket':nz(t,.5,'bandpass',700,3200,2,.45*v);tn(t,.3,'sawtooth',220,80,.05*v);break;
   case 'mortar':tn(t,.25,'sine',110,45,.7*v);nz(t,.2,'lowpass',900,150,.7,.5*v);break;
   case 'flak':nz(t,.12,'bandpass',900,400,1.2,.5*v);tn(t,.08,'square',120,60,.1*v);break;
+  case 'shell':nz(t,1.2,'lowpass',1400,60,.7,1.2*v);tn(t,.9,'sine',70,25,1*v);break;
+  case 'ripple':for(let i=0;i<6;i++)nz(t+i*.09,.6,'bandpass',600,2600,1.6,.4*v);break;
   case 'flame':nz(t,.25,'lowpass',900,300,.6,.4*v);break;
   case 'laser':tn(t,.18,'sawtooth',1800,300,.12*v);tn(t,.12,'sine',2400,900,.1*v);break;
   case 'bomb':tn(t,.6,'sine',1400,500,.08*v);break;

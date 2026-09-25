@@ -202,6 +202,8 @@ const WEAPONS={
   flamer:{name:'Flamer',cost:30,dmg:7,rof:.18,range:115,splash:26,proj:'flame',cls:'fire',req:'flamer',noVtol:true,desc:'Short-range flamethrower. Burns groups of enemies.'},
   laser:{name:'Pulse Laser',cost:90,dmg:30,rof:1.1,range:290,proj:'laser',cls:'laser',req:'laser',air:true,desc:'Long-range laser that hits instantly. Can also hit VTOLs.'},
   sensor:{name:'Radar Turret',cost:35,util:'sensor',desc:'Sees very far. Your artillery can fire at everything it spots.'},
+  howitzer:{name:'Howitzer',cost:0,dmg:85,rof:7,range:1150,minRange:220,splash:75,proj:'shell',cls:'cannon',heavy:true,structOnly:true},
+  ripple:{name:'Ripple Rockets',cost:0,dmg:45,rof:13,range:1900,minRange:320,splash:55,proj:'ripple',cls:'rocket',heavy:true,salvo:6,structOnly:true},
   construct:{name:'Construction',cost:15,util:'truck',noVtol:true,desc:'Builds and repairs structures.'},
   repair:{name:'Repair Turret',cost:40,util:'repair',noVtol:true,heal:14,range:90,desc:'Repairs nearby damaged units.'},
   transport:{name:'Transport Bay',cost:40,util:'transport',vtolOnly:true,req:'vtol',cap:6,desc:'VTOL only. Carries up to 6 ground units over cliffs.'}
@@ -219,10 +221,12 @@ const BDEF={
   mortarPit:{name:'Mortar Pit',w:1,h:1,hp:800,cost:200,time:15,weapon:'mortar',rangeAdd:20,gunH:10,req:'mortar',desc:'Long-range artillery emplacement.'},
   aaSite:{name:'AA Site',w:1,h:1,hp:700,cost:150,time:12,weapon:'aa',rangeAdd:20,gunH:16,req:'aa',desc:'Anti-air guns against VTOLs.'},
   repairFac:{name:'Repair Facility',w:2,h:2,hp:900,cost:200,time:18,req:'repairfac',heal:32,range:110,desc:'Repairs nearby units. Send damaged units here.'},
+  howitzer:{name:'Howitzer Emplacement',w:2,h:2,hp:1600,cost:450,time:30,weapon:'howitzer',gunH:30,req:'howitzer',desc:'Huge long-range gun. Fires at anything you can see, far across the map.'},
+  ripple:{name:'Ripple Rocket Battery',w:3,h:3,hp:2600,cost:900,time:45,weapon:'ripple',gunH:40,req:'ripple',desc:'Gigantic rocket battery. Fires 6 rockets at a time over an enormous range.'},
   sensorTower:{name:'Radar Tower',w:1,h:1,hp:600,cost:100,time:10,desc:'Sees very far. Your artillery can fire at everything it spots.'},
   vtolPad:{name:'VTOL Pad',w:1,h:1,hp:500,cost:100,time:8,req:'vtol',desc:'VTOLs land here to rearm and repair.'}
 };
-const BUILD_LIST=['factory','research','derrick','wall','sensorTower','tower','bunker','hardpoint','mortarPit','aaSite','repairFac','vtolPad'];
+const BUILD_LIST=['factory','research','derrick','wall','sensorTower','tower','bunker','hardpoint','mortarPit','aaSite','howitzer','ripple','repairFac','vtolPad'];
 const DEFENSES=['tower','bunker','hardpoint','mortarPit','aaSite'];
 const RESEARCH=[
   {id:'mg',name:'Hardened MG Bullets',desc:'+30% machinegun and AA damage',cost:120,time:18},
@@ -241,6 +245,8 @@ const RESEARCH=[
   {id:'mantis',name:'Mantis Body',desc:'Unlocks the advanced Mantis body',cost:300,time:35,req:'python'},
   {id:'laser',name:'Pulse Laser',desc:'Unlocks the long-range Pulse Laser',cost:320,time:40,req:'rocket'},
   {id:'optics',name:'Thermal Imaging',desc:'+25% sight range. Great at night and in bad weather',cost:180,time:22},
+  {id:'howitzer',name:'Howitzer',desc:'Unlocks the long-range Howitzer Emplacement',cost:350,time:40,req:'mortar'},
+  {id:'ripple',name:'Ripple Rockets',desc:'Unlocks the giant Ripple Rocket Battery',cost:600,time:60,req:'howitzer'},
   {id:'armor',name:'Composite Alloys',desc:'+35% armor for everything',cost:250,time:30},
   {id:'oil',name:'Improved Derricks',desc:'+50% oil output',cost:200,time:25},
   {id:'engine',name:'Improved Engines',desc:'+20% unit speed',cost:150,time:20}
@@ -309,7 +315,7 @@ function carve(x0,y0,x1,y1,r){const n=Math.ceil(Math.hypot(x1-x0,y1-y0))*2;for(l
 // the map is mirrored into four corners; these give the bottom-left quarter
 const baseTile=()=>[11,MH-11];
 function oilQuarter(){const S=MW,b=baseTile(),o=[[b[0]-5,b[1]-6],[b[0]+4,b[1]+5],[b[0]+7,b[1]-5],[b[0]-7,b[1]+5]];
-  const f=[[.34,.63],[.42,.81],[.47,.53],[.19,.53]];if(S>64)f.push([.27,.72],[.12,.66],[.4,.93]);if(S>96)f.push([.22,.88],[.33,.57]);
+  const f=[[.34,.63],[.42,.81],[.47,.53],[.19,.53]];if(S>64)f.push([.27,.72],[.12,.66],[.4,.93]);if(S>96)f.push([.22,.88],[.33,.57]);if(S>128)f.push([.3,.8],[.14,.6],[.45,.7],[.08,.8],[.38,.97]);
   for(const[fx,fy]of f)o.push([Math.round(fx*S),Math.round(fy*S)]);return o}
 function genMap(seed,tid,clears,custom){
   theme=THEMES[tid];themeId=tid;mapSeed=seed;
@@ -461,10 +467,12 @@ function addDecal(x,y,r){const d={x,y,r:r+R()*6};decals.push(d);if(world){d.mesh
   if(decals.length>70){const o=decals.shift();if(o.mesh)world.remove(o.mesh)}}
 
 // ---------- COMBAT ----------
-function findTarget(e,range,minR=0){let best=null,bs=1e9;
+function spottedBy(team,o){for(const x of ents)if(x.team===team&&x.hp>0&&!x.inside&&Math.hypot(x.x-o.x,x.y-o.y)<baseSight(x))return true;return false}
+function findTarget(e,range,minR=0){let best=null,bs=1e9;const longRange=range>500&&e.team!==0;
   for(const o of ents){if(!hostile(e.team,o.team)||o.hp<=0||o.inside||o.stranded||(e.team===0&&!shown(o))||!canHit(e,o))continue;const d=edgeDist(e,o);if(d>range||d<minR)continue;
-    const s=d+(o.kind==='b'?(o.type==='wall'?220:80):0)+(isTruck(o)?30:0);if(s<bs){bs=s;best=o}}return best}
-const PROJ_SPEED={mg:950,cannon:560,rocket:620,mortar:330,flak:800,bomb:260,flame:420};
+    const s=d+(o.kind==='b'?(o.type==='wall'?220:80):0)+(isTruck(o)?30:0);if(s<bs){if(longRange&&!spottedBy(e.team,o))continue;bs=s;best=o}}return best}
+const PROJ_SPEED={mg:950,cannon:560,rocket:620,mortar:330,flak:800,bomb:260,flame:420,shell:420,ripple:520};
+const ARC=p=>p==='mortar'||p==='bomb'||p==='shell'||p==='ripple';
 function fire(e,t){
   const w=wOf(e),dmg=dmgOf(e);
   const gh=e.kind==='b'?BDEF[e.type].gunH:e.st.gunH+(e.h||0),len=w.proj==='cannon'?24:w.proj==='bomb'?0:14;
@@ -472,9 +480,9 @@ function fire(e,t){
   if(w.proj==='laser'){fx.push({t:'beam',x0:bx,y0:by,h0:gh,x1:t.x,y1:t.y,h1:(t.h||0)+(t.kind==='b'?20:8),life:.18,max:.18});sfx('laser',e.x,e.y);
     e.cd=w.rof*(.9+R()*.2)/(e.kind==='u'?1+.06*e.rank:1);if(isAir(e))e.ammo--;damage(t,dmg,e.team,e);return}
   const p={x:bx,y:by,h:gh,tid:t.id,th:t.h||0,tx:t.x,ty:t.y,ox:(R()-.5)*t.r*.8,oy:(R()-.5)*t.r*.8,sp:PROJ_SPEED[w.proj],dmg,proj:w.proj,team:e.team,src:e.id,splash:w.splash||0,air:isAir(t)};
-  if(w.proj==='mortar'||w.proj==='bomb'){const sc=w.proj==='bomb'?20:30;p.tid=0;p.tx=t.x+(R()-.5)*sc;p.ty=t.y+(R()-.5)*sc;p.th=0;p.d0=Math.max(1,Math.hypot(p.tx-bx,p.ty-by))}
-  if(world){p.mesh=makeProjMesh(p.proj);world.add(p.mesh)}
-  projs.push(p);
+  if(ARC(w.proj)){const sc=w.proj==='bomb'?20:w.proj==='mortar'?30:70;p.tid=0;p.tx=t.x+(R()-.5)*sc;p.ty=t.y+(R()-.5)*sc;p.th=0;p.d0=Math.max(1,Math.hypot(p.tx-bx,p.ty-by))}
+  const shots=[p];for(let i=1;i<(w.salvo||1);i++){const q={...p,tx:t.x+(R()-.5)*140,ty:t.y+(R()-.5)*140,sp:p.sp*(.85+R()*.3)};q.d0=Math.max(1,Math.hypot(q.tx-bx,q.ty-by));shots.push(q)}
+  for(const q of shots){if(world){q.mesh=makeProjMesh(q.proj);world.add(q.mesh)}projs.push(q)}
   if(w.proj!=='bomb')fx.push({t:'flash',x:bx,y:by,h:gh,life:.07,max:.07,size:w.proj==='cannon'||w.proj==='mortar'?9:5});
   sfx(w.proj,e.x,e.y);
   e.cd=w.rof*(.9+R()*.2)/(e.kind==='u'?1+.06*e.rank:1);
@@ -632,12 +640,12 @@ function update(dt){
     if(blocked(tileOf(u.x),tileOf(u.y))){const f=nearestFree(tileOf(u.x),tileOf(u.y),tileOf(u.x),tileOf(u.y));if(f){u.x+=((f[0]+.5)*TILE-u.x)*Math.min(1,dt*6);u.y+=((f[1]+.5)*TILE-u.y)*Math.min(1,dt*6)}}}}
   for(const p of projs){const t=p.tid?byId.get(p.tid):null;if(t){p.tx=t.x+p.ox;p.ty=t.y+p.oy;p.th=t.h||0}
     if(p.proj==='flame')for(let k=0;k<2;k++)fx.push({t:'p',k:'fire',x:p.x,y:p.y,h:p.hh||heightAt(p.x,p.y)+10,vx:(R()-.5)*25,vy:(R()-.5)*25,vh:20,life:.3,max:.4});
-    if(p.proj==='rocket'&&R()<.8)fx.push({t:'p',k:'smoke',x:p.x,y:p.y,h:p.hh||heightAt(p.x,p.y)+14,vx:0,vy:0,vh:8,life:.6,max:1.6});
+    if((p.proj==='rocket'||p.proj==='ripple')&&R()<.8)fx.push({t:'p',k:'smoke',x:p.x,y:p.y,h:p.hh||heightAt(p.x,p.y)+14,vx:0,vy:0,vh:8,life:.6,max:1.6});
     const dx=p.tx-p.x,dy=p.ty-p.y,d=Math.hypot(dx,dy),s=p.sp*dt;
     if(d<=s){p.dead=true;if(p.mesh)world.remove(p.mesh);const src=byId.get(p.src);
-      if(p.proj==='mortar'||p.proj==='bomb'||p.proj==='flame'){for(const o of ents)if(hostile(p.team,o.team)&&o.hp>0&&!isAir(o)&&!o.stranded&&!o.inside&&edgeDist({x:p.tx,y:p.ty},o)<=p.splash)damage(o,p.dmg*(o.kind==='b'?1:.85),p.team,src);
+      if(ARC(p.proj)||p.proj==='flame'){for(const o of ents)if(hostile(p.team,o.team)&&o.hp>0&&!isAir(o)&&!o.stranded&&!o.inside&&edgeDist({x:p.tx,y:p.ty},o)<=p.splash)damage(o,p.dmg*(o.kind==='b'?1:.85),p.team,src);
         if(p.proj==='flame'){for(let k=0;k<5;k++)fx.push({t:'p',k:'fire',x:p.tx+(R()-.5)*30,y:p.ty+(R()-.5)*30,h:heightAt(p.tx,p.ty)+6,vx:(R()-.5)*40,vy:(R()-.5)*40,vh:30+R()*50,life:.5,max:.6})}
-        else{boom(p.tx,p.ty,16,22);addDecal(p.tx,p.ty,14);sfx('boom',p.tx,p.ty)}}
+        else{const big=p.proj==='shell'||p.proj==='ripple';boom(p.tx,p.ty,big?26:16,big?34:22);addDecal(p.tx,p.ty,big?24:14);sfx(big?'bigboom':'boom',p.tx,p.ty)}}
       else if(t)damage(t,p.dmg*(p.air&&p.proj==='mg'?.6:1),p.team,src);
       const gh=heightAt(p.tx,p.ty)+(p.th||0);
       if(p.proj==='cannon'||p.proj==='rocket'){boom(p.tx,p.ty,8,10,gh+8);sfx('hit',p.tx,p.ty);if(R()<.3&&!p.th)addDecal(p.tx,p.ty,6)}
@@ -655,7 +663,7 @@ function update(dt){
 
 // ---------- FOG OF WAR ----------
 function sightOf(e){return baseSight(e)*WEATHER[weather].sight*(tech[e.team]&&tech[e.team].optics?1.25:1)}
-function baseSight(e){if(e.kind==='u'&&e.st.util==='sensor')return 640;if(e.type==='sensorTower')return 720;if(e.kind==='u')return e.st.air?330:e.d.weapon==='mortar'?300:270;return{hq:380,tower:320,hardpoint:320,aaSite:320,bunker:260,mortarPit:280,wall:90}[e.type]||210}
+function baseSight(e){if(e.kind==='u'&&e.st.util==='sensor')return 640;if(e.type==='sensorTower')return 720;if(e.kind==='u')return e.st.air?330:e.d.weapon==='mortar'?300:270;return{howitzer:300,ripple:300,hq:380,tower:320,hardpoint:320,aaSite:320,bunker:260,mortarPit:280,wall:90}[e.type]||210}
 function updateFog(){visible.fill(0);
   for(const e of ents){if(hostile(0,e.team)||e.hp<=0||e.stranded||e.inside)continue;const r=sightOf(e)/TILE,cx=e.x/TILE,cy=e.y/TILE;
     for(let y=Math.max(0,Math.floor(cy-r));y<=Math.min(MH-1,Math.ceil(cy+r));y++)for(let x=Math.max(0,Math.floor(cx-r));x<=Math.min(MW-1,Math.ceil(cx+r));x++)if((x+.5-cx)**2+(y+.5-cy)**2<=r*r){visible[idx(x,y)]=1;explored[idx(x,y)]=1}}
@@ -683,9 +691,9 @@ const AI_T={
   lasm:{body:'mantis',prop:'tracks',weapon:'laser'},
   canm:{body:'mantis',prop:'tracks',weapon:'cannon'}
 };
-const AI_RESEARCH=['mg','tracks','lancer','flamer','hardpoint','python','cannon','mortar','armor','aa','repairfac','rocket','mantis','oil','engine','laser','optics','hover','vtol'];
+const AI_RESEARCH=['mg','tracks','lancer','flamer','hardpoint','python','cannon','mortar','armor','aa','repairfac','rocket','mantis','oil','engine','laser','optics','howitzer','hover','vtol','ripple'];
 function newAI(o){o=o||{};return{t:2+R()*2,time:0,wave:0,size:o.size||6,maxSize:o.maxSize||22,next:o.first||220,gap:o.gap||140,inc:o.inc||1,mode:o.mode||'base',
-  base:o.base||3,grow:o.grow||1.3,pool:o.pool||null,waveT:o.first||40,research:o.research||AI_RESEARCH}}
+  base:o.base||3,grow:o.grow||1.3,harass:o.harass??true,squads:[],pool:o.pool||null,waveT:o.first||40,research:o.research||AI_RESEARCH}}
 const foesOf=T=>ents.filter(e=>e.hp>0&&!e.stranded&&hostile(T,e.team));
 function aiPickUnit(ai,T,ctx){
   const W={mgv:ai.wave<2?3:.6,mgc:2,can:2,canp:3,lan:2,lanp:3,mor:1.1,hov:1,rep:ctx.army>5?.8:0,aa:ctx.foeAir?2.5:0,vbomb:ctx.pads?1.6:0,vlan:ctx.pads?1:0,flc:1.2,lasm:3,canm:2.5};
@@ -718,6 +726,8 @@ function aiThink(T){
     else if(has(T,'vtol')&&cnt('vtolPad')<2&&pw()>=250)b=tryBuild('vtolPad',hx-Math.sign(MW/2-hx)*3,hy);
     else if(has(T,'repairfac')&&cnt('repairFac')===0&&pw()>=300)b=tryBuild('repairFac',hx,hy);
     else if(has(T,'mortar')&&cnt('mortarPit')<1&&pw()>=300)b=tryBuild('mortarPit',toward[0],toward[1]);
+    else if(has(T,'ripple')&&cnt('ripple')<1&&pw()>=1100)b=tryBuild('ripple',hx,hy);
+    else if(has(T,'howitzer')&&cnt('howitzer')<2&&pw()>=600)b=tryBuild('howitzer',hx,hy);
     else if(DEFENSES.slice(0,3).reduce((s,d)=>s+cnt(d),0)<2+ai.wave&&pw()>=260)b=tryBuild(has(T,'hardpoint')?(R()<.5?'hardpoint':'bunker'):'tower',toward[0],toward[1]);
     if(b){orderBuild(t,b);unf.push(b)}}
   for(const f of facs){if(f.built<1||f.queue.length>=2)continue;
@@ -727,21 +737,55 @@ function aiThink(T){
   for(const r of mine.filter(e=>e.type==='research'&&e.built>=1&&!e.res)){
     const n=RESEARCH.find(x=>ai.research.includes(x.id)&&!has(T,x.id)&&(!x.req||has(T,x.req))&&!mine.some(m=>m.res&&m.res.id===x.id));
     if(n&&pw()>=n.cost+150){power[T]-=n.cost;r.res={id:n.id,prog:0}}}
-  // defend our own base and the bases of our allies
+  // ---------- squads: defenders stay home, raiders harass, main groups gather, attack and retreat ----------
+  ai.squads=ai.squads||[];if(ai.harassT===undefined)ai.harassT=ai.next*.55+R()*40;
+  const inSquad=new Set();for(const s of ai.squads){s.u=s.u.filter(id=>alive(byId.get(id)));for(const id of s.u)inSquad.add(id)}
+  const homePt=()=>{const p=mine.find(e=>e.type==='repairFac'&&e.built>=1)||hq;return{x:p.x+(R()-.5)*140,y:p.y+(R()-.5)*140}};
+  // badly damaged units pull back for repairs, like a careful player would
+  for(const a of army){if(a.hp<a.maxHp*.3&&!a.retreat&&a.st.util!=='repair'){a.retreat=true;for(const s of ai.squads)s.u=s.u.filter(id=>id!==a.id);inSquad.delete(a.id);const p=homePt();orderMove(a,p.x,p.y)}
+    else if(a.retreat&&a.hp>a.maxHp*.8)a.retreat=false}
+  ai.squads=ai.squads.filter(s=>s.u.length);
+  const idle=army.filter(a=>!inSquad.has(a.id)&&!a.retreat);
   const homes=ents.filter(e=>e.type==='hq'&&e.hp>0&&!hostile(T,e.team));
   const threat=foes.find(e=>e.kind==='u'&&dist(e,hq)<600)||foes.find(e=>e.kind==='u'&&homes.some(h=>dist(e,h)<500));
-  if(threat){for(const a of army)if(!a.order||(a.order.t!=='attack'&&!a.raid))orderMove(a,threat.x,threat.y,'amove');
-    for(const a of air)if(!a.order&&canHit(a,threat))a.order={t:'attack',id:threat.id};ai.time+=1;return}
-  const home=army.filter(a=>!a.raid);
-  // never attack before the grace period ends; later, attack on schedule or when the army is very large
-  if((ai.time>ai.next&&home.length>=3)||(ai.wave>0&&home.length>=ai.size*1.5)){
-    const fb=foes.filter(e=>e.kind==='b');
-    if(fb.length){const hqs=fb.filter(e=>e.type==='hq').sort((a,b)=>dist(a,hq)-dist(b,hq));
-      const tgt=R()<.5&&hqs.length?hqs[0]:fb.sort((a,b)=>dist(a,hq)-dist(b,hq))[0];
-      for(const a of home){a.raid=true;orderMove(a,tgt.x+(R()-.5)*60,tgt.y+(R()-.5)*60,'amove')}
-      for(const a of air){const t=fb[Math.floor(R()*fb.length)];a.order={t:'attack',id:t.id}}
-      ai.wave++;ai.size=Math.min(ai.maxSize,ai.size+2);ai.next=ai.time+ai.gap;if(ai.wave>1&&tgt.team===0)msg(TEAM_NAMES[T]+' attack incoming!')}}
-  for(const a of army)if(a.raid&&!a.order){let best=null,bd=1e9;for(const e of foes){const d=dist(e,a);if(d<bd){bd=d;best=e}}if(best)orderMove(a,best.x,best.y,'amove')}
+  if(threat){for(const a of idle)if(!a.order||a.order.t!=='attack')orderMove(a,threat.x,threat.y,'amove');
+    for(const s of ai.squads)if(s.st==='gather')for(const id of s.u)orderMove(byId.get(id),threat.x,threat.y,'amove');
+    for(const a of air)if(!a.order&&canHit(a,threat))a.order={t:'attack',id:threat.id}}
+  else for(const a of idle)if(!a.order&&dist(a,hq)>650){const p=homePt();orderMove(a,p.x,p.y)}
+  const fb=foes.filter(e=>e.kind==='b');
+  const pickTarget=(from,role)=>{if(!fb.length)return null;
+    if(role==='harass'){const soft=fb.filter(e=>e.type==='derrick'||e.type==='sensorTower'||e.type==='research'),pool=soft.length?soft:fb;
+      return pool.map(e=>{const eh=findHQ(e.team);return[e,dist(e,from)*.6-(eh?dist(e,eh):0)*.8+R()*300]}).sort((a,b)=>a[1]-b[1])[0][0]}
+    const hqs=fb.filter(e=>e.type==='hq');if(hqs.length&&R()<.35)return hqs.sort((a,b)=>dist(a,from)-dist(b,from))[0];
+    return fb.map(e=>[e,dist(e,from)+R()*400]).sort((a,b)=>a[1]-b[1])[0][0]};
+  const sendHome=s=>{s.st='retreat';s.t=0;for(const id of s.u){const p=homePt();orderMove(byId.get(id),p.x,p.y)}};
+  // small, fast raiding parties go after oil derricks and other soft targets
+  if(ai.harass&&!threat&&ai.time>ai.harassT&&idle.length>=4&&!ai.squads.some(s=>s.role==='harass')){
+    const fast=idle.slice().sort((a,b)=>speedOf(b)-speedOf(a)).slice(0,2+Math.floor(R()*3)),t=pickTarget(hq,'harass');
+    if(t){ai.squads.push({role:'harass',u:fast.map(a=>a.id),st:'move',tid:t.id,tgtTeam:t.team,str:fast.reduce((s,a)=>s+a.hp,0),t:0});for(const a of fast)orderMove(a,t.x+(R()-.5)*60,t.y+(R()-.5)*60,'amove')}
+    ai.harassT=ai.time+50+R()*70}
+  // main attack: gather at a rally point outside the base first, leave a few defenders behind
+  const need=Math.max(3,Math.round(ai.size*(.7+R()*.3)));
+  // groups are capped, so a big army comes as several waves instead of one blob
+  if(!threat&&((ai.time>ai.next&&idle.length>=need)||(ai.wave>0&&idle.length>=ai.size*2.5&&ai.time>(ai.lastLaunch||0)+25+R()*30))){
+    const keep=Math.min(3,Math.floor(idle.length*.25)),grp=idle.slice(keep,keep+ai.size+Math.floor(R()*5)),t=pickTarget(hq,'attack');
+    if(t&&grp.length>=3){const rx=hq.x+(t.x-hq.x)*.3+(R()-.5)*150,ry=hq.y+(t.y-hq.y)*.3+(R()-.5)*150;
+      ai.squads.push({role:'attack',u:grp.map(a=>a.id),st:'gather',tid:t.id,tgtTeam:t.team,rx,ry,str:grp.reduce((s,a)=>s+a.hp,0),t:0});
+      for(const a of grp)orderMove(a,rx+(R()-.5)*90,ry+(R()-.5)*90);
+      ai.wave++;ai.lastLaunch=ai.time;ai.size=Math.min(ai.maxSize,ai.size+2);ai.next=ai.time+ai.gap*(.7+R()*.6)}}
+  for(const s of ai.squads){s.t++;const us=s.u.map(id=>byId.get(id)),cx=us.reduce((a,u)=>a+u.x,0)/us.length,cy=us.reduce((a,u)=>a+u.y,0)/us.length,str=us.reduce((a,u)=>a+u.hp,0)/s.str;
+    if(s.st!=='retreat'&&str<(s.role==='harass'?.5:.4)){sendHome(s);if(s.tgtTeam===0&&s.role==='attack')msg(TEAM_NAMES[T]+' forces are retreating!',2.5);continue}
+    if(s.st==='gather'){if(us.filter(u=>Math.hypot(u.x-s.rx,u.y-s.ry)<220).length>=us.length*.8||s.t>30){
+        let tt=byId.get(s.tid);if(!alive(tt))tt=pickTarget({x:cx,y:cy},'attack');if(!tt){sendHome(s);continue}
+        s.st='move';s.t=0;s.tid=tt.id;s.tgtTeam=tt.team;for(const u of us)orderMove(u,tt.x+(R()-.5)*80,tt.y+(R()-.5)*80,'amove');
+        for(const a of air)if(!a.rearming&&!a.order)a.order={t:'attack',id:tt.id};
+        if(tt.team===0)msg(TEAM_NAMES[T]+' attack incoming!',3)}}
+    else if(s.st==='move'){const tt=byId.get(s.tid);
+      if(!alive(tt)){const nx=fb.filter(e=>e.hp>0).map(e=>[e,Math.hypot(e.x-cx,e.y-cy)]).sort((a,b)=>a[1]-b[1])[0];
+        if(nx&&((s.role==='attack'&&str>.55)||nx[1]<400)){s.tid=nx[0].id;for(const u of us)orderMove(u,nx[0].x+(R()-.5)*80,nx[0].y+(R()-.5)*80,'amove')}else sendHome(s)}
+      else for(const u of us)if(!u.order)orderMove(u,tt.x+(R()-.5)*80,tt.y+(R()-.5)*80,'amove')}
+    else if(s.t>35||us.every(u=>dist(u,hq)<500))s.u=[]}
+  ai.squads=ai.squads.filter(s=>s.u.length);
   for(const a of air)if(!a.order&&!a.rearming&&ai.wave>0&&R()<.2){const pb=foes.filter(e=>canHit(a,e));if(pb.length)a.order={t:'attack',id:pb[Math.floor(R()*pb.length)].id}}
   ai.time+=1;
 }
@@ -780,7 +824,7 @@ const MISSIONS=[
   {name:'First Foothold',theme:'desert',seed:4101,
     brief:'Commander, the Collapse left this valley in ruins, but its oil fields still flow. A raider faction holds the northern ridge. Secure the oil, get your research running and build defenses before they come for us.',
     tech:[],research:['mg','tracks','hardpoint','oil','armor'],enemyTech:[],power:1000,
-    ai:{inc:.55,first:420,gap:220,size:5,maxSize:10,research:['mg','armor']},
+    ai:{inc:.55,first:420,gap:220,size:5,maxSize:10,research:['mg','armor'],harass:false},
     setup(){stdBase(0,{units:['truck','truck','mgv','mgv']});stdBase(1,{extra:[['tower',1]],units:['truck','mgv','mgv']})},
     objectives:[{text:'Build 4 Oil Derricks',check:()=>countB(0,'derrick')>=4},{text:'Build a Research Facility',check:()=>countB(0,'research')>=1},{text:'Build 2 Guard Towers',check:()=>countB(0,'tower')>=2}]},
   {name:'Hold the Line',theme:'snow',seed:5202,weather:'snow',
@@ -842,7 +886,7 @@ function audioInit(){if(SFX.ctx)return;try{const C=window.AudioContext||window.w
   const lfo=c.createOscillator(),lg=c.createGain();lfo.frequency.value=.13;lg.gain.value=160;lfo.connect(lg);lg.connect(f.frequency);lfo.start()}catch(e){SFX.ctx=null}}
 function nz(t,dur,type,f0,f1,q,gain){const c=SFX.ctx,s=c.createBufferSource();s.buffer=SFX.noise;const f=c.createBiquadFilter();f.type=type;f.frequency.setValueAtTime(f0,t);f.frequency.exponentialRampToValueAtTime(f1,t+dur);f.Q.value=q;const g=c.createGain();g.gain.setValueAtTime(gain,t);g.gain.exponentialRampToValueAtTime(.001,t+dur);s.connect(f);f.connect(g);g.connect(SFX.master);s.start(t,Math.random()*1.5);s.stop(t+dur+.05)}
 function tn(t,dur,type,f0,f1,gain){const c=SFX.ctx,o=c.createOscillator();o.type=type;o.frequency.setValueAtTime(f0,t);if(f1!==f0)o.frequency.exponentialRampToValueAtTime(f1,t+dur);const g=c.createGain();g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(gain,t+.01);g.gain.exponentialRampToValueAtTime(.001,t+dur);o.connect(g);g.connect(SFX.master);o.start(t);o.stop(t+dur+.05)}
-const GAP={flame:.12,laser:.1,mg:.06,cannon:.08,rocket:.1,mortar:.12,flak:.08,bomb:.15,hit:.05,boom:.05,bigboom:.1};
+const GAP={shell:.3,ripple:.3,flame:.12,laser:.1,mg:.06,cannon:.08,rocket:.1,mortar:.12,flak:.08,bomb:.15,hit:.05,boom:.05,bigboom:.1};
 function sfx(n,x,y){if(!SFX.ctx||!SFX.on)return;const c=SFX.ctx,t=c.currentTime;if(t-(SFX.last[n]||0)<(GAP[n]||.03))return;
   let v=1;if(x!==undefined){v=Math.max(0,1-Math.hypot(x-cam.x,y-cam.y)/1700)*Math.min(1,700/cam.dist);if(v<.03)return}
   SFX.last[n]=t;
@@ -852,6 +896,8 @@ function sfx(n,x,y){if(!SFX.ctx||!SFX.on)return;const c=SFX.ctx,t=c.currentTime;
   case 'rocket':nz(t,.5,'bandpass',700,3200,2,.45*v);tn(t,.3,'sawtooth',220,80,.05*v);break;
   case 'mortar':tn(t,.25,'sine',110,45,.7*v);nz(t,.2,'lowpass',900,150,.7,.5*v);break;
   case 'flak':nz(t,.12,'bandpass',900,400,1.2,.5*v);tn(t,.08,'square',120,60,.1*v);break;
+  case 'shell':nz(t,1.2,'lowpass',1400,60,.7,1.2*v);tn(t,.9,'sine',70,25,1*v);break;
+  case 'ripple':for(let i=0;i<6;i++)nz(t+i*.09,.6,'bandpass',600,2600,1.6,.4*v);break;
   case 'flame':nz(t,.25,'lowpass',900,300,.6,.4*v);break;
   case 'laser':tn(t,.18,'sawtooth',1800,300,.12*v);tn(t,.12,'sine',2400,900,.1*v);break;
   case 'bomb':tn(t,.6,'sine',1400,500,.08*v);break;
@@ -1023,6 +1069,15 @@ function makeBuildingModel(type,team){
     for(const[x,z]of[[-26,-26],[26,-26],[-26,26],[26,26]])g.add(box(4,34,4,MAT.steel,x,19,z));g.add(box(56,3,4,MAT.steelL,0,36,-26));g.add(box(56,3,4,MAT.steelL,0,36,26));
     const arm=new THREE.Group();arm.position.set(0,36,0);arm.add(box(4,3,54,MAT.yellow,0,0,0));arm.add(box(3,10,3,MAT.steelD,0,-6,0));g.add(arm);r.spin=arm;
     g.add(box(18,1.5,5,MAT.green,0,3.8,0));g.add(box(5,1.5,18,MAT.green,0,3.8,0));g.add(box(8,6,8,T.main,-26,6,-26));
+  }else if(type==='howitzer'){
+    g.add(cyl(28,32,10,12,MAT.steelD,0,8,0));g.add(box(64,4,10,T.dark,0,4,30));
+    const tur=new THREE.Group();tur.position.set(0,16,0);tur.add(box(34,12,28,T.dark,0,4,0));tur.add(box(20,8,22,MAT.steel,-4,13,0));
+    const bar=cyl(3.6,4.2,50,10,MAT.steelD,20,26,0);bar.rotation.z=-1.0;tur.add(bar);tur.add(box(10,10,12,MAT.black,6,12,0));g.add(tur);r.tur=tur;
+  }else if(type==='ripple'){
+    g.add(box(96,12,96,MAT.steel,0,8,0));g.add(box(100,3,100,MAT.steelD,0,15,0));for(const[x,z]of[[-40,-40],[40,-40],[-40,40],[40,40]])g.add(box(10,20,10,T.dark,x,24,z));
+    const tur=new THREE.Group();tur.position.set(0,18,0);tur.add(cyl(32,34,8,16,MAT.steelD,0,4,0));
+    const pod=new THREE.Group();pod.position.set(0,26,0);pod.rotation.z=.55;pod.add(box(56,30,44,T.dark,0,0,0));pod.add(box(8,32,46,T.light,-24,0,0));
+    for(let i=0;i<3;i++)for(let j=0;j<2;j++)pod.add(barrel(4.5,3,MAT.black,27,-7+j*14,-13+i*13));tur.add(pod);g.add(tur);r.tur=tur;
   }else if(type==='sensorTower'){
     for(const[x,z]of[[-8,-8],[8,-8],[-8,8],[8,8]]){const l=cyl(1.2,1.2,50,5,MAT.steelL,x*.6,27,z*.6);l.rotation.z=x>0?.12:-.12;l.rotation.x=z>0?-.12:.12;g.add(l)}
     for(let i=1;i<4;i++)g.add(box(14-i*2,1,14-i*2,MAT.steelL,0,i*13,0));g.add(box(8,4,8,T.main,0,52,0));
@@ -1037,8 +1092,8 @@ function makeBuildingModel(type,team){
 // ---------- SCENE SYNC ----------
 const DECAL_GEO=new THREE.CircleGeometry(1,20);
 const DECAL_MAT=new THREE.MeshBasicMaterial({map:canvasTex(64,64,g=>{const gr=g.createRadialGradient(32,32,0,32,32,32);gr.addColorStop(0,'rgba(15,8,4,.85)');gr.addColorStop(.6,'rgba(25,14,6,.5)');gr.addColorStop(1,'rgba(25,14,6,0)');g.fillStyle=gr;g.fillRect(0,0,64,64)}),transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2});
-const PROJ_GEO={mg:new THREE.BoxGeometry(12,1.2,1.2),rocket:new THREE.BoxGeometry(9,2.2,2.2),cannon:new THREE.SphereGeometry(2.6,8,6),mortar:new THREE.SphereGeometry(3,8,6),flak:new THREE.SphereGeometry(1.8,6,4),flame:new THREE.SphereGeometry(3,6,4),bomb:new THREE.CapsuleGeometry?new THREE.CapsuleGeometry(2,5,4,8):new THREE.SphereGeometry(3,8,6)};
-const PROJ_MAT={mg:new THREE.MeshBasicMaterial({color:0xfff2a0}),rocket:new THREE.MeshBasicMaterial({color:0xffe0a0}),cannon:new THREE.MeshBasicMaterial({color:0xffc060}),mortar:new THREE.MeshBasicMaterial({color:0xffb050}),flak:new THREE.MeshBasicMaterial({color:0xffe080}),flame:new THREE.MeshBasicMaterial({color:0xff8a20,transparent:true,opacity:.8,blending:THREE.AdditiveBlending,depthWrite:false}),bomb:L(0x333333)};
+const PROJ_GEO={mg:new THREE.BoxGeometry(12,1.2,1.2),rocket:new THREE.BoxGeometry(9,2.2,2.2),cannon:new THREE.SphereGeometry(2.6,8,6),mortar:new THREE.SphereGeometry(3,8,6),flak:new THREE.SphereGeometry(1.8,6,4),flame:new THREE.SphereGeometry(3,6,4),shell:new THREE.SphereGeometry(4.5,8,6),ripple:new THREE.BoxGeometry(14,3.5,3.5),bomb:new THREE.CapsuleGeometry?new THREE.CapsuleGeometry(2,5,4,8):new THREE.SphereGeometry(3,8,6)};
+const PROJ_MAT={mg:new THREE.MeshBasicMaterial({color:0xfff2a0}),rocket:new THREE.MeshBasicMaterial({color:0xffe0a0}),cannon:new THREE.MeshBasicMaterial({color:0xffc060}),mortar:new THREE.MeshBasicMaterial({color:0xffb050}),flak:new THREE.MeshBasicMaterial({color:0xffe080}),shell:new THREE.MeshBasicMaterial({color:0xffd070}),ripple:new THREE.MeshBasicMaterial({color:0xffe0a0}),flame:new THREE.MeshBasicMaterial({color:0xff8a20,transparent:true,opacity:.8,blending:THREE.AdditiveBlending,depthWrite:false}),bomb:L(0x333333)};
 function makeProjMesh(p){const m=new THREE.Mesh(PROJ_GEO[p],PROJ_MAT[p]);if(p==='bomb')m.rotation.z=Math.PI/2;return m}
 const GLOW_TEX=canvasTex(32,32,g=>{const gr=g.createRadialGradient(16,16,0,16,16,16);gr.addColorStop(0,'rgba(255,255,255,1)');gr.addColorStop(1,'rgba(255,255,255,0)');g.fillStyle=gr;g.fillRect(0,0,32,32)});
 const FLAME_MAT=new THREE.SpriteMaterial({color:0xff9a30,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,map:GLOW_TEX});
@@ -1063,7 +1118,7 @@ function syncScene(rt){
   for(const[id,m]of meshes)if(!byId.has(id)){world.remove(m.g);meshes.delete(id)}
   for(const o of oils){const ob=o.bid&&byId.get(o.bid),ov=!ob||!shown(ob);o.mesh.visible=ov;o.flame.visible=ov&&explored[idx(o.tx,o.ty)]===1;const f=.7+.3*Math.sin(rt*9+o.x);o.flame.scale.set(14*f,22*f,1)}
   for(const p of projs)if(p.mesh){const tot=Math.hypot(p.tx-p.x,p.ty-p.y),gnd=heightAt(p.x,p.y);let hh;
-    if(p.proj==='mortar'){const k=1-tot/p.d0;hh=gnd+p.h*(1-k)+Math.sin(k*Math.PI)*p.d0*.4}
+    if(p.proj==='mortar'||p.proj==='shell'||p.proj==='ripple'){const k=1-tot/p.d0;hh=gnd+p.h*(1-k)+Math.sin(k*Math.PI)*Math.min(p.d0*.4,520)}
     else if(p.proj==='bomb'){const k=1-tot/p.d0;hh=gnd+p.h*(1-k)}
     else{const t=p.tid?byId.get(p.tid):null,th=(p.th||0)+(t&&t.kind==='b'?25:10);hh=gnd+th+(p.h-th)*Math.min(1,tot/200)}
     p.hh=hh;p.mesh.position.set(p.x,hh,p.y);if(p.proj!=='bomb')p.mesh.rotation.y=-Math.atan2(p.ty-p.y,p.tx-p.x);const ptx=tileOf(p.x),pty=tileOf(p.y);p.mesh.visible=inb(ptx,pty)&&visible[idx(ptx,pty)]===1}
@@ -1089,7 +1144,7 @@ function syncScene(rt){
 
 // ---------- CAMERA ----------
 function updateCamera(){
-  cam.x=clamp(cam.x,0,WW);cam.y=clamp(cam.y,0,WH);cam.dist=clamp(cam.dist,280,1500);
+  cam.x=clamp(cam.x,0,WW);cam.y=clamp(cam.y,0,WH);cam.dist=clamp(cam.dist,280,1900);
   const th=heightAt(cam.x,cam.y)*.5,cp=Math.cos(cam.pitch)*cam.dist;
   camera.position.set(cam.x+Math.sin(cam.yaw)*cp,th+Math.sin(cam.pitch)*cam.dist,cam.y+Math.cos(cam.yaw)*cp);camera.lookAt(cam.x,th,cam.y);camera.updateMatrixWorld();
   sun.position.set(cam.x-500,900,cam.y-300);sun.target.position.set(cam.x,0,cam.y);
@@ -1229,7 +1284,7 @@ function openDesigner(){if(state!=='play')return;$('designer').hidden=false;dPre
 function closeDesigner(){$('designer').hidden=true;paused=dPrev;panelKey=''}
 function reqText(c){return c.req?'Requires research: '+RESEARCH.find(r=>r.id===c.req).name:''}
 function chipRow(el,defs,part){const boxEl=$(el);boxEl.innerHTML='';
-  for(const k in defs){const c=defs[k],ok=avail(0,c),b=document.createElement('button');b.type='button';b.className='chip'+(dz[part]===k?' on':'');b.disabled=!ok;b.title=ok?c.desc:reqText(c);
+  for(const k in defs){if(defs[k].structOnly)continue;const c=defs[k],ok=avail(0,c),b=document.createElement('button');b.type='button';b.className='chip'+(dz[part]===k?' on':'');b.disabled=!ok;b.title=ok?c.desc:reqText(c);
     b.innerHTML=esc(c.name)+'<small>'+(ok?'⚡'+c.cost:'Locked')+'</small>';b.onclick=()=>{dz[part]=k;sfx('click');renderDesigner()};boxEl.appendChild(b)}}
 function renderDesigner(){
   chipRow('dBody',BODIES,'body');chipRow('dProp',PROPS,'prop');chipRow('dWeap',WEAPONS,'weapon');
@@ -1272,7 +1327,7 @@ function skirmishMenu(){
   const teams=`<div class="dlabel">Teams</div><div class="chips center">${[1,2,3].slice(0,sk.ais).map(t=>`<button class="chip${sk.allies[t-1]?' on':''}" onclick="sk.allies[${t-1}]=!sk.allies[${t-1}];skirmishMenu()">${TEAM_NAMES[t]}: ${sk.allies[t-1]?'Ally':'Enemy'}</button>`).join('')}</div>`;
   const enemies=[1,2,3].slice(0,sk.ais).filter(t=>!sk.allies[t-1]).length;
   showMenu(`<h1>SKIRMISH</h1>${row('Map','map',Object.keys(THEMES).map(k=>[k,THEMES[k].name]).concat(Object.keys(maps).map(n=>['custom:'+n,n+' (custom)'])))}
-  ${cm?'':row('Map size','size',[[64,'Small'],[96,'Medium'],[128,'Large']])}
+  ${cm?'':row('Map size','size',[[64,'Small'],[96,'Medium'],[128,'Large'],[192,'Huge']])}
   ${row('Opponents','ais',aiOpts)}${teams}${enemies>1?row('Enemies','mode',[['vs','Team up against you'],['ffa','Fight each other too']]):''}
   ${row('Weather','weather',Object.keys(WEATHER).map(k=>[k,WEATHER[k].name]))}${row('Difficulty','diff',[['easy','Easy'],['normal','Normal'],['hard','Hard']])}
   ${enemies?'':'<p class="sub">Make at least one AI an enemy.</p>'}
@@ -1382,7 +1437,7 @@ function newSkirmish(o){sk=JSON.parse(JSON.stringify(o));audioInit();
   startWorld(Math.floor(R()*1e9),custom?custom.theme:o.map,[],custom);
   power=Array(N).fill(1000);tech=Array.from({length:N},()=>({}));templates=Array.from({length:N},()=>[]);addDefaultTemplates(0);initStats(N);
   const D=DIFF[o.diff],first=Math.round(D.first*(.8+.2*MW/64));
-  ais=[null];for(let t=1;t<N;t++)ais.push(newAI({inc:D.inc,first:first+(t-1)*45,gap:D.gap}));
+  ais=[null];for(let t=1;t<N;t++)ais.push(newAI({inc:D.inc,first:first+(t-1)*45,gap:D.gap,harass:o.diff!=='easy'}));
   // allies take the corners next to the player, enemies the far ones
   const free=[1,2,3],corner=[0];for(let t=1;t<N;t++){const pref=ally[t]===0?[2,3,1]:[1,3,2],c=pref.find(x=>free.includes(x));free.splice(free.indexOf(c),1);corner.push(c)}
   for(let t=0;t<N;t++)stdBase(t,{corner:corner[t],start:custom?custom.starts[t]:null,extra:t&&o.diff!=='easy'?[['tower',1]]:[]});
@@ -1530,7 +1585,7 @@ function edUI(){
   edChips('eBrush',[[1,'Small'],[2,'Medium'],[4,'Large']],ED.brush,v=>{ED.brush=v;edUI()});
   edChips('eSym',[[true,'Mirror to 4 corners'],[false,'Off']],ED.mirror,v=>{ED.mirror=v;edUI()});
   edChips('eTheme',Object.keys(THEMES).map(k=>[k,THEMES[k].name]),ED.theme,v=>{ED.theme=v;edUI();edDraw()});
-  edChips('eSize',[[64,'Small'],[96,'Medium'],[128,'Large']],ED.size,v=>{if(v!==ED.size){edNew(v,ED.theme);edUI();edDraw()}});
+  edChips('eSize',[[64,'Small'],[96,'Medium'],[128,'Large'],[192,'Huge']],ED.size,v=>{if(v!==ED.size){edNew(v,ED.theme);edUI();edDraw()}});
   const maps=customMaps(),lst=$('eList');lst.innerHTML='';
   for(const n of Object.keys(maps)){const b=document.createElement('button');b.type='button';b.className='chip';b.innerHTML=esc(n)+'<small>Load</small>';b.onclick=()=>edLoad(n);lst.appendChild(b);
     const d=document.createElement('button');d.type='button';d.className='chip';d.title='Delete '+n;d.innerHTML='✕<small>Delete</small>';d.onclick=()=>{const m=customMaps();delete m[n];lsSet('if_maps',JSON.stringify(m));edUI()};lst.appendChild(d)}

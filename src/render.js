@@ -149,6 +149,15 @@ function makeBuildingModel(type,team){
     for(const[x,z]of[[-26,-26],[26,-26],[-26,26],[26,26]])g.add(box(4,34,4,MAT.steel,x,19,z));g.add(box(56,3,4,MAT.steelL,0,36,-26));g.add(box(56,3,4,MAT.steelL,0,36,26));
     const arm=new THREE.Group();arm.position.set(0,36,0);arm.add(box(4,3,54,MAT.yellow,0,0,0));arm.add(box(3,10,3,MAT.steelD,0,-6,0));g.add(arm);r.spin=arm;
     g.add(box(18,1.5,5,MAT.green,0,3.8,0));g.add(box(5,1.5,18,MAT.green,0,3.8,0));g.add(box(8,6,8,T.main,-26,6,-26));
+  }else if(type==='howitzer'){
+    g.add(cyl(28,32,10,12,MAT.steelD,0,8,0));g.add(box(64,4,10,T.dark,0,4,30));
+    const tur=new THREE.Group();tur.position.set(0,16,0);tur.add(box(34,12,28,T.dark,0,4,0));tur.add(box(20,8,22,MAT.steel,-4,13,0));
+    const bar=cyl(3.6,4.2,50,10,MAT.steelD,20,26,0);bar.rotation.z=-1.0;tur.add(bar);tur.add(box(10,10,12,MAT.black,6,12,0));g.add(tur);r.tur=tur;
+  }else if(type==='ripple'){
+    g.add(box(96,12,96,MAT.steel,0,8,0));g.add(box(100,3,100,MAT.steelD,0,15,0));for(const[x,z]of[[-40,-40],[40,-40],[-40,40],[40,40]])g.add(box(10,20,10,T.dark,x,24,z));
+    const tur=new THREE.Group();tur.position.set(0,18,0);tur.add(cyl(32,34,8,16,MAT.steelD,0,4,0));
+    const pod=new THREE.Group();pod.position.set(0,26,0);pod.rotation.z=.55;pod.add(box(56,30,44,T.dark,0,0,0));pod.add(box(8,32,46,T.light,-24,0,0));
+    for(let i=0;i<3;i++)for(let j=0;j<2;j++)pod.add(barrel(4.5,3,MAT.black,27,-7+j*14,-13+i*13));tur.add(pod);g.add(tur);r.tur=tur;
   }else if(type==='sensorTower'){
     for(const[x,z]of[[-8,-8],[8,-8],[-8,8],[8,8]]){const l=cyl(1.2,1.2,50,5,MAT.steelL,x*.6,27,z*.6);l.rotation.z=x>0?.12:-.12;l.rotation.x=z>0?-.12:.12;g.add(l)}
     for(let i=1;i<4;i++)g.add(box(14-i*2,1,14-i*2,MAT.steelL,0,i*13,0));g.add(box(8,4,8,T.main,0,52,0));
@@ -163,8 +172,8 @@ function makeBuildingModel(type,team){
 // ---------- SCENE SYNC ----------
 const DECAL_GEO=new THREE.CircleGeometry(1,20);
 const DECAL_MAT=new THREE.MeshBasicMaterial({map:canvasTex(64,64,g=>{const gr=g.createRadialGradient(32,32,0,32,32,32);gr.addColorStop(0,'rgba(15,8,4,.85)');gr.addColorStop(.6,'rgba(25,14,6,.5)');gr.addColorStop(1,'rgba(25,14,6,0)');g.fillStyle=gr;g.fillRect(0,0,64,64)}),transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2});
-const PROJ_GEO={mg:new THREE.BoxGeometry(12,1.2,1.2),rocket:new THREE.BoxGeometry(9,2.2,2.2),cannon:new THREE.SphereGeometry(2.6,8,6),mortar:new THREE.SphereGeometry(3,8,6),flak:new THREE.SphereGeometry(1.8,6,4),flame:new THREE.SphereGeometry(3,6,4),bomb:new THREE.CapsuleGeometry?new THREE.CapsuleGeometry(2,5,4,8):new THREE.SphereGeometry(3,8,6)};
-const PROJ_MAT={mg:new THREE.MeshBasicMaterial({color:0xfff2a0}),rocket:new THREE.MeshBasicMaterial({color:0xffe0a0}),cannon:new THREE.MeshBasicMaterial({color:0xffc060}),mortar:new THREE.MeshBasicMaterial({color:0xffb050}),flak:new THREE.MeshBasicMaterial({color:0xffe080}),flame:new THREE.MeshBasicMaterial({color:0xff8a20,transparent:true,opacity:.8,blending:THREE.AdditiveBlending,depthWrite:false}),bomb:L(0x333333)};
+const PROJ_GEO={mg:new THREE.BoxGeometry(12,1.2,1.2),rocket:new THREE.BoxGeometry(9,2.2,2.2),cannon:new THREE.SphereGeometry(2.6,8,6),mortar:new THREE.SphereGeometry(3,8,6),flak:new THREE.SphereGeometry(1.8,6,4),flame:new THREE.SphereGeometry(3,6,4),shell:new THREE.SphereGeometry(4.5,8,6),ripple:new THREE.BoxGeometry(14,3.5,3.5),bomb:new THREE.CapsuleGeometry?new THREE.CapsuleGeometry(2,5,4,8):new THREE.SphereGeometry(3,8,6)};
+const PROJ_MAT={mg:new THREE.MeshBasicMaterial({color:0xfff2a0}),rocket:new THREE.MeshBasicMaterial({color:0xffe0a0}),cannon:new THREE.MeshBasicMaterial({color:0xffc060}),mortar:new THREE.MeshBasicMaterial({color:0xffb050}),flak:new THREE.MeshBasicMaterial({color:0xffe080}),shell:new THREE.MeshBasicMaterial({color:0xffd070}),ripple:new THREE.MeshBasicMaterial({color:0xffe0a0}),flame:new THREE.MeshBasicMaterial({color:0xff8a20,transparent:true,opacity:.8,blending:THREE.AdditiveBlending,depthWrite:false}),bomb:L(0x333333)};
 function makeProjMesh(p){const m=new THREE.Mesh(PROJ_GEO[p],PROJ_MAT[p]);if(p==='bomb')m.rotation.z=Math.PI/2;return m}
 const GLOW_TEX=canvasTex(32,32,g=>{const gr=g.createRadialGradient(16,16,0,16,16,16);gr.addColorStop(0,'rgba(255,255,255,1)');gr.addColorStop(1,'rgba(255,255,255,0)');g.fillStyle=gr;g.fillRect(0,0,32,32)});
 const FLAME_MAT=new THREE.SpriteMaterial({color:0xff9a30,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,map:GLOW_TEX});
@@ -189,7 +198,7 @@ function syncScene(rt){
   for(const[id,m]of meshes)if(!byId.has(id)){world.remove(m.g);meshes.delete(id)}
   for(const o of oils){const ob=o.bid&&byId.get(o.bid),ov=!ob||!shown(ob);o.mesh.visible=ov;o.flame.visible=ov&&explored[idx(o.tx,o.ty)]===1;const f=.7+.3*Math.sin(rt*9+o.x);o.flame.scale.set(14*f,22*f,1)}
   for(const p of projs)if(p.mesh){const tot=Math.hypot(p.tx-p.x,p.ty-p.y),gnd=heightAt(p.x,p.y);let hh;
-    if(p.proj==='mortar'){const k=1-tot/p.d0;hh=gnd+p.h*(1-k)+Math.sin(k*Math.PI)*p.d0*.4}
+    if(p.proj==='mortar'||p.proj==='shell'||p.proj==='ripple'){const k=1-tot/p.d0;hh=gnd+p.h*(1-k)+Math.sin(k*Math.PI)*Math.min(p.d0*.4,520)}
     else if(p.proj==='bomb'){const k=1-tot/p.d0;hh=gnd+p.h*(1-k)}
     else{const t=p.tid?byId.get(p.tid):null,th=(p.th||0)+(t&&t.kind==='b'?25:10);hh=gnd+th+(p.h-th)*Math.min(1,tot/200)}
     p.hh=hh;p.mesh.position.set(p.x,hh,p.y);if(p.proj!=='bomb')p.mesh.rotation.y=-Math.atan2(p.ty-p.y,p.tx-p.x);const ptx=tileOf(p.x),pty=tileOf(p.y);p.mesh.visible=inb(ptx,pty)&&visible[idx(ptx,pty)]===1}
@@ -215,7 +224,7 @@ function syncScene(rt){
 
 // ---------- CAMERA ----------
 function updateCamera(){
-  cam.x=clamp(cam.x,0,WW);cam.y=clamp(cam.y,0,WH);cam.dist=clamp(cam.dist,280,1500);
+  cam.x=clamp(cam.x,0,WW);cam.y=clamp(cam.y,0,WH);cam.dist=clamp(cam.dist,280,1900);
   const th=heightAt(cam.x,cam.y)*.5,cp=Math.cos(cam.pitch)*cam.dist;
   camera.position.set(cam.x+Math.sin(cam.yaw)*cp,th+Math.sin(cam.pitch)*cam.dist,cam.y+Math.cos(cam.yaw)*cp);camera.lookAt(cam.x,th,cam.y);camera.updateMatrixWorld();
   sun.position.set(cam.x-500,900,cam.y-300);sun.target.position.set(cam.x,0,cam.y);

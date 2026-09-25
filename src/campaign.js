@@ -22,7 +22,7 @@ const MISSIONS=[
   {name:'First Foothold',theme:'desert',seed:4101,
     brief:'Commander, the Collapse left this valley in ruins, but its oil fields still flow. A raider faction holds the northern ridge. Secure the oil, get your research running and build defenses before they come for us.',
     tech:[],research:['mg','tracks','hardpoint','oil','armor'],enemyTech:[],power:1000,
-    ai:{inc:.55,first:420,gap:220,size:5,maxSize:10,research:['mg','armor']},
+    ai:{inc:.55,first:420,gap:220,size:5,maxSize:10,research:['mg','armor'],harass:false},
     setup(){stdBase(0,{units:['truck','truck','mgv','mgv']});stdBase(1,{extra:[['tower',1]],units:['truck','mgv','mgv']})},
     objectives:[{text:'Build 4 Oil Derricks',check:()=>countB(0,'derrick')>=4},{text:'Build a Research Facility',check:()=>countB(0,'research')>=1},{text:'Build 2 Guard Towers',check:()=>countB(0,'tower')>=2}]},
   {name:'Hold the Line',theme:'snow',seed:5202,weather:'snow',

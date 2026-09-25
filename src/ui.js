@@ -71,7 +71,7 @@ function openDesigner(){if(state!=='play')return;$('designer').hidden=false;dPre
 function closeDesigner(){$('designer').hidden=true;paused=dPrev;panelKey=''}
 function reqText(c){return c.req?'Requires research: '+RESEARCH.find(r=>r.id===c.req).name:''}
 function chipRow(el,defs,part){const boxEl=$(el);boxEl.innerHTML='';
-  for(const k in defs){const c=defs[k],ok=avail(0,c),b=document.createElement('button');b.type='button';b.className='chip'+(dz[part]===k?' on':'');b.disabled=!ok;b.title=ok?c.desc:reqText(c);
+  for(const k in defs){if(defs[k].structOnly)continue;const c=defs[k],ok=avail(0,c),b=document.createElement('button');b.type='button';b.className='chip'+(dz[part]===k?' on':'');b.disabled=!ok;b.title=ok?c.desc:reqText(c);
     b.innerHTML=esc(c.name)+'<small>'+(ok?'⚡'+c.cost:'Locked')+'</small>';b.onclick=()=>{dz[part]=k;sfx('click');renderDesigner()};boxEl.appendChild(b)}}
 function renderDesigner(){
   chipRow('dBody',BODIES,'body');chipRow('dProp',PROPS,'prop');chipRow('dWeap',WEAPONS,'weapon');
@@ -114,7 +114,7 @@ function skirmishMenu(){
   const teams=`<div class="dlabel">Teams</div><div class="chips center">${[1,2,3].slice(0,sk.ais).map(t=>`<button class="chip${sk.allies[t-1]?' on':''}" onclick="sk.allies[${t-1}]=!sk.allies[${t-1}];skirmishMenu()">${TEAM_NAMES[t]}: ${sk.allies[t-1]?'Ally':'Enemy'}</button>`).join('')}</div>`;
   const enemies=[1,2,3].slice(0,sk.ais).filter(t=>!sk.allies[t-1]).length;
   showMenu(`<h1>SKIRMISH</h1>${row('Map','map',Object.keys(THEMES).map(k=>[k,THEMES[k].name]).concat(Object.keys(maps).map(n=>['custom:'+n,n+' (custom)'])))}
-  ${cm?'':row('Map size','size',[[64,'Small'],[96,'Medium'],[128,'Large']])}
+  ${cm?'':row('Map size','size',[[64,'Small'],[96,'Medium'],[128,'Large'],[192,'Huge']])}
   ${row('Opponents','ais',aiOpts)}${teams}${enemies>1?row('Enemies','mode',[['vs','Team up against you'],['ffa','Fight each other too']]):''}
   ${row('Weather','weather',Object.keys(WEATHER).map(k=>[k,WEATHER[k].name]))}${row('Difficulty','diff',[['easy','Easy'],['normal','Normal'],['hard','Hard']])}
   ${enemies?'':'<p class="sub">Make at least one AI an enemy.</p>'}
@@ -224,7 +224,7 @@ function newSkirmish(o){sk=JSON.parse(JSON.stringify(o));audioInit();
   startWorld(Math.floor(R()*1e9),custom?custom.theme:o.map,[],custom);
   power=Array(N).fill(1000);tech=Array.from({length:N},()=>({}));templates=Array.from({length:N},()=>[]);addDefaultTemplates(0);initStats(N);
   const D=DIFF[o.diff],first=Math.round(D.first*(.8+.2*MW/64));
-  ais=[null];for(let t=1;t<N;t++)ais.push(newAI({inc:D.inc,first:first+(t-1)*45,gap:D.gap}));
+  ais=[null];for(let t=1;t<N;t++)ais.push(newAI({inc:D.inc,first:first+(t-1)*45,gap:D.gap,harass:o.diff!=='easy'}));
   // allies take the corners next to the player, enemies the far ones
   const free=[1,2,3],corner=[0];for(let t=1;t<N;t++){const pref=ally[t]===0?[2,3,1]:[1,3,2],c=pref.find(x=>free.includes(x));free.splice(free.indexOf(c),1);corner.push(c)}
   for(let t=0;t<N;t++)stdBase(t,{corner:corner[t],start:custom?custom.starts[t]:null,extra:t&&o.diff!=='easy'?[['tower',1]]:[]});

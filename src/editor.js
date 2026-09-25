@@ -45,7 +45,7 @@ function edUI(){
   edChips('eBrush',[[1,'Small'],[2,'Medium'],[4,'Large']],ED.brush,v=>{ED.brush=v;edUI()});
   edChips('eSym',[[true,'Mirror to 4 corners'],[false,'Off']],ED.mirror,v=>{ED.mirror=v;edUI()});
   edChips('eTheme',Object.keys(THEMES).map(k=>[k,THEMES[k].name]),ED.theme,v=>{ED.theme=v;edUI();edDraw()});
-  edChips('eSize',[[64,'Small'],[96,'Medium'],[128,'Large']],ED.size,v=>{if(v!==ED.size){edNew(v,ED.theme);edUI();edDraw()}});
+  edChips('eSize',[[64,'Small'],[96,'Medium'],[128,'Large'],[192,'Huge']],ED.size,v=>{if(v!==ED.size){edNew(v,ED.theme);edUI();edDraw()}});
   const maps=customMaps(),lst=$('eList');lst.innerHTML='';
   for(const n of Object.keys(maps)){const b=document.createElement('button');b.type='button';b.className='chip';b.innerHTML=esc(n)+'<small>Load</small>';b.onclick=()=>edLoad(n);lst.appendChild(b);
     const d=document.createElement('button');d.type='button';d.className='chip';d.title='Delete '+n;d.innerHTML='✕<small>Delete</small>';d.onclick=()=>{const m=customMaps();delete m[n];lsSet('if_maps',JSON.stringify(m));edUI()};lst.appendChild(d)}
