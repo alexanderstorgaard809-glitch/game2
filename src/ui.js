@@ -2,7 +2,7 @@
 // UI: HUD, unit designer, menus, input, save/load and game flow
 // =====================================================================
 const mouse={x:0,y:0,in:false,world:null},keys={};let drag=null,rot=null,lastClick={t:0,key:null},lastGroupKey={k:null,t:0};
-let inGameMenu=false,menuPrevPause=false,skMap='desert';
+let inGameMenu=false,menuPrevPause=false,sk={map:'desert',size:64,ais:1,mode:'vs',diff:'normal'};
 function uiOpen(){return !$('designer').hidden||$('overlay').style.display!=='none'}
 function lsGet(k){try{return localStorage.getItem(k)}catch(e){return null}}
 function lsSet(k,v){try{localStorage.setItem(k,v);return true}catch(e){return false}}
@@ -45,7 +45,7 @@ function rebuildPanel(){
           ()=>{if(f.res&&f.res.id===r.id){power[0]+=r.cost;f.res=null}});
         refs.push(()=>{b.querySelector('.prog').style.width=f.res&&f.res.id===r.id?(f.res.prog/r.time*100)+'%':'0';b.classList.toggle('dis',power[0]<r.cost||(!!f.res&&f.res.id!==r.id))})}}}
   refs.push(()=>{let t;
-    if(sel.length===1){const e=sel[0];t=(e.team?'Enemy ':'')+unitLabel(e)+'  —  HP '+Math.ceil(e.hp)+'/'+e.maxHp;
+    if(sel.length===1){const e=sel[0];t=(e.team?TEAM_NAMES[e.team]+' ':'')+unitLabel(e)+'  —  HP '+Math.ceil(e.hp)+'/'+e.maxHp;
       if(e.kind==='u'&&e.rank)t+='  ·  '+RANK_NAMES[e.rank]+' ('+e.kills+' kills)';
       if(e.kind==='u'&&e.st.air)t+='  ·  Ammo '+e.ammo+'/'+(VTOL_AMMO[e.d.weapon]||4)+(e.rearming?' (rearming)':'');
       if(e.kind==='b'&&e.built<1)t+='  (under construction '+Math.floor(e.built*100)+'%)';
@@ -103,9 +103,11 @@ function briefing(i){const M=MISSIONS[i];
   <div class="dlabel">Objectives</div><ul>${M.objectives.map(o=>'<li>'+esc(o.text)+(o.timer?' ('+fmtTime(o.timer)+')':'')+'</li>').join('')}<li>Keep your Command Center alive</li></ul>
   <div><button class="big" onclick="startMission(${i})">Start mission</button><button class="big" onclick="campaignMenu()">Back</button></div>`)}
 function skirmishMenu(){
-  showMenu(`<h1>SKIRMISH</h1><div class="dlabel">Map</div><div class="chips center">${Object.keys(THEMES).map(k=>`<button class="chip${skMap===k?' on':''}" onclick="skMap='${k}';skirmishMenu()">${THEMES[k].name}</button>`).join('')}</div>
-  <div class="dlabel">Difficulty</div><div><button class="big" onclick="newSkirmish(skMap,'easy')">Easy</button><button class="big" onclick="newSkirmish(skMap,'normal')">Normal</button><button class="big" onclick="newSkirmish(skMap,'hard')">Hard</button></div>
-  <button class="big" onclick="mainMenu()">Back</button>`)}
+  const row=(label,key,opts)=>`<div class="dlabel">${label}</div><div class="chips center">${opts.map(([v,t])=>`<button class="chip${sk[key]===v?' on':''}" onclick="sk.${key}=${typeof v==='string'?"'"+v+"'":v};skirmishMenu()">${t}</button>`).join('')}</div>`;
+  showMenu(`<h1>SKIRMISH</h1>${row('Map','map',Object.keys(THEMES).map(k=>[k,THEMES[k].name]))}${row('Map size','size',[[64,'Small'],[96,'Medium'],[128,'Large']])}
+  ${row('Opponents','ais',[[1,'1 AI'],[2,'2 AIs'],[3,'3 AIs']])}${sk.ais>1?row('Alliances','mode',[['vs','AIs team up against you'],['ffa','Free for all']]):''}
+  ${row('Difficulty','diff',[['easy','Easy'],['normal','Normal'],['hard','Hard']])}
+  <div><button class="big" onclick="newSkirmish({...sk})">Start game</button><button class="big" onclick="mainMenu()">Back</button></div>`)}
 function helpMenu(){showMenu(`<h1>HOW TO PLAY</h1><ul>
   <li><b>Select</b> units by dragging a box or clicking. Double-click selects all units of that design.</li>
   <li><b>Right-click</b> to move or attack. Right-click a damaged building with trucks to repair it.</li>
@@ -122,7 +124,7 @@ function openGameMenu(){if(state!=='play'||inGameMenu)return;if(!$('designer').h
   showMenu(`<h1>PAUSED</h1><div class="menu-list"><button class="big" onclick="resumeGame()">Resume</button><button class="big" onclick="slotsMenu('save')">Save game</button>
   <button class="big" onclick="slotsMenu('load')">Load game</button><button class="big" onclick="restartGame()">Restart</button><button class="big" onclick="mainMenu()">Quit to main menu</button></div>`)}
 function resumeGame(){inGameMenu=false;paused=menuPrevPause;hideMenu()}
-function restartGame(){if(game.mode==='campaign')startMission(game.mission);else newSkirmish(themeId,diff)}
+function restartGame(){if(game.mode==='campaign')startMission(game.mission);else newSkirmish(game.sk||sk)}
 function slotsMenu(mode){
   const back=inGameMenu?'inGameMenu=false;openGameMenu()':'mainMenu()';
   const rows=[1,2,3].map(i=>{let meta=null;try{meta=JSON.parse(lsGet('if_meta_'+i)||'null')}catch(e){}
@@ -135,29 +137,30 @@ function endGame(win,reason){if(state!=='play')return;state='over';inGameMenu=fa
     if(win&&progress()<i+1)lsSet('if_progress',String(Math.min(MISSIONS.length-1,i+1)));
     btns=(win&&!last?`<button class="big" onclick="briefing(${i+1})">Next mission</button>`:'')+`<button class="big" onclick="startMission(${i})">${win?'Play again':'Retry mission'}</button><button class="big" onclick="mainMenu()">Main menu</button>`;
     if(win&&last)reason='Campaign complete! The valley is yours, Commander.'}
-  else btns=`<button class="big" onclick="newSkirmish('${themeId}','${diff}')">Play again</button><button class="big" onclick="mainMenu()">Main menu</button>`;
+  else btns=`<button class="big" onclick="restartGame()">Play again</button><button class="big" onclick="mainMenu()">Main menu</button>`;
   sfx(win?'complete':'alert');say(win?'Mission accomplished':'Mission failed');
   showMenu(`<h1>${win?'VICTORY':'DEFEAT'}</h1><p>${esc(reason||(win?'The enemy Command Center has been destroyed!':''))}</p>
   <p class="sub">Time ${tm} · Units built ${stats.built} · Enemies destroyed ${stats.kills} · Losses ${stats.lost}</p><div>${btns}</div>`)}
 
 // ---------- SAVE / LOAD ----------
 function saveGame(slot){
-  const data={v:2,seed:mapSeed,theme:themeId,game,diff,time,power,tech,stats,ai,nextId,templates,groups,cam:{x:cam.x,y:cam.y,dist:cam.dist,yaw:cam.yaw,pitch:cam.pitch},
+  const data={v:3,size:MW,seed:mapSeed,theme:themeId,game,diff,time,power,tech,stats,ais,nextId,templates,groups,cam:{x:cam.x,y:cam.y,dist:cam.dist,yaw:cam.yaw,pitch:cam.pitch},
     explored:Array.from(explored).join(''),ents:ents.filter(e=>e.hp>0).map(e=>{const o={};for(const k in e)if(k!=='auto'&&k!=='st'&&k!=='sw')o[k]=e[k];return o})};
-  const label=game.mode==='campaign'?'Mission '+(game.mission+1)+': '+MISSIONS[game.mission].name:'Skirmish: '+THEMES[themeId].name+' ('+diff+')';
+  const label=game.mode==='campaign'?'Mission '+(game.mission+1)+': '+MISSIONS[game.mission].name:'Skirmish: '+THEMES[themeId].name+', '+(game.teams-1)+' AI ('+diff+')';
   const ok=lsSet('if_save_'+slot,JSON.stringify(data))&&lsSet('if_meta_'+slot,JSON.stringify({label,time:fmtTime(time),date:new Date().toLocaleString()}));
   if(ok){msg('Game saved to slot '+slot,2);sfx('complete');resumeGame()}else{const m=$('slotMsg');if(m)m.textContent='Saving failed. Your browser does not allow saving here.'}}
 function loadGame(slot){let s=null;try{s=JSON.parse(lsGet('if_save_'+slot)||'null')}catch(e){}
   if(!s){const m=$('slotMsg');if(m)m.textContent='This save could not be loaded.';return}
-  audioInit();const clears=s.game.mode==='campaign'?(MISSIONS[s.game.mission].clears||[]):[];
+  audioInit();setMapSize(s.size||64);const clears=s.game.mode==='campaign'?(MISSIONS[s.game.mission].clears||[]):[];
   startWorld(s.seed,s.theme,clears);
-  game=s.game;diff=s.diff;time=s.time;power=s.power;tech=s.tech;stats=s.stats;ai=s.ai;templates=s.templates;groups=s.groups||{};
+  game=s.game;diff=s.diff;time=s.time;power=s.power;tech=s.tech;stats=s.stats;ais=s.ais||[null,s.ai];templates=s.templates;groups=s.groups||{};
   for(const e of s.ents){e.auto=null;if(e.kind==='u')e.st=calcStats(e.d);else{e.sw=structWeapon(e.type);for(let y=e.ty;y<e.ty+e.h;y++)for(let x=e.tx;x<e.tx+e.w;x++)bldMap[idx(x,y)]=e.id;if(e.type==='derrick'){const o=oils[oilMap[idx(e.tx,e.ty)]-1];if(o)o.bid=e.id}}ents.push(e);byId.set(e.id,e)}
   nextId=s.nextId;for(let i=0;i<MW*MH;i++){explored[i]=+s.explored[i]||0;fogCur[i]=explored[i]?150:238}
   beginPlay();Object.assign(cam,s.cam);msg('Game loaded',2)}
 
 // ---------- GAME FLOW ----------
 function startWorld(seed,tid,clears){
+  gameId++;
   if(world)scene.remove(world);meshes.clear();world=new THREE.Group();scene.add(world);
   ents=[];byId=new Map();nextId=1;sel=[];placing=null;projs=[];fx=[];decals=[];markers=[];time=0;paused=false;groups={};lastAlert=-99;stats={kills:0,lost:0,built:0};
   genMap(seed,tid,clears);applyTheme();bldMap=new Int32Array(MW*MH);
@@ -171,13 +174,17 @@ function startWorld(seed,tid,clears){
 function beginPlay(){updateFog();state='play';inGameMenu=false;hideMenu();$('designer').hidden=true;panelKey='';missionT=0;
   const hq=findHQ(0)||ents.find(e=>e.team===0);if(hq){cam.x=hq.x+80;cam.y=hq.y-60}cam.yaw=.7;cam.dist=760;cam.pitch=.92;
   $('obj').hidden=game.mode!=='campaign';$('obj').innerHTML=''}
-function newSkirmish(tid,d){audioInit();game={mode:'skirmish',mission:-1,ms:{}};diff=d;startWorld(Math.floor(R()*1e9),tid,[]);
-  power=[1000,1000];tech=[{},{}];templates=[[],[]];addDefaultTemplates(0);ai=newAI({inc:DIFF[d].inc,first:DIFF[d].first,gap:DIFF[d].gap});
-  stdBase(0,{});stdBase(1,{extra:d==='easy'?[]:[['tower',1]]});beginPlay();
-  msg('Build oil derricks to get power. The enemy will attack in about '+Math.round(DIFF[d].first/60)+' minutes!',8)}
-function startMission(i){const M=MISSIONS[i];audioInit();game={mode:'campaign',mission:i,ms:{t:0}};diff='normal';startWorld(M.seed,M.theme,M.clears||[]);
+function newSkirmish(o){sk={...o};audioInit();setMapSize(o.size);const N=o.ais+1;
+  game={mode:'skirmish',mission:-1,ms:{},teams:N,ally:(o.mode==='ffa'?[0,1,2,3]:[0,1,1,1]).slice(0,N),sk:{...o}};diff=o.diff;
+  startWorld(Math.floor(R()*1e9),o.map,[]);
+  power=Array(N).fill(1000);tech=Array.from({length:N},()=>({}));templates=Array.from({length:N},()=>[]);addDefaultTemplates(0);
+  const D=DIFF[o.diff],first=Math.round(D.first*(.8+.2*o.size/64));
+  ais=[null];for(let t=1;t<N;t++)ais.push(newAI({inc:D.inc,first:first+(t-1)*45,gap:D.gap}));
+  for(let t=0;t<N;t++)stdBase(t,{extra:t&&o.diff!=='easy'?[['tower',1]]:[]});
+  beginPlay();msg('Build oil derricks to get power. The first enemy attack comes in about '+Math.round(first/60)+' minutes!',8)}
+function startMission(i){const M=MISSIONS[i];audioInit();setMapSize(64);game={mode:'campaign',mission:i,ms:{t:0},teams:2,ally:[0,1]};diff='normal';startWorld(M.seed,M.theme,M.clears||[]);
   power=[M.power||1000,1200];tech=[Object.fromEntries(M.tech.map(k=>[k,true])),Object.fromEntries(M.enemyTech.map(k=>[k,true]))];templates=[[],[]];addDefaultTemplates(0);
-  ai=newAI(M.ai);M.setup();beginPlay();msg('Mission '+(i+1)+': '+M.name,4)}
+  ais=[null,newAI(M.ai)];M.setup();beginPlay();msg('Mission '+(i+1)+': '+M.name,4)}
 
 // ---------- INPUT ----------
 function pickAt(sx,sy){let best=null,bd=1e9;
@@ -218,7 +225,7 @@ function rightClick(wx,wy,t){
   const own=sel.filter(e=>e.team===0&&!e.stranded);if(!own.length)return;
   if(own.length===1&&own[0].kind==='b'){if(own[0].type==='factory'){own[0].rally={x:wx,y:wy};markers.push({x:wx,y:wy,life:.5,c:'#8f8'});sfx('ack')}return}
   const us=own.filter(e=>e.kind==='u');if(!us.length)return;
-  if(t&&t.team===1){for(const u of us){if(canHit(u,t)){u.order={t:'attack',id:t.id};u.repath=0;u.chasing=false;setPath(u,t.x,t.y)}else orderMove(u,wx,wy)}markers.push({x:t.x,y:t.y,life:.5,c:'#f66'});sfx('ack');return}
+  if(t&&hostile(0,t.team)){for(const u of us){if(canHit(u,t)){u.order={t:'attack',id:t.id};u.repath=0;u.chasing=false;setPath(u,t.x,t.y)}else orderMove(u,wx,wy)}markers.push({x:t.x,y:t.y,life:.5,c:'#f66'});sfx('ack');return}
   if(t&&t.team===0&&t.kind==='b'&&(t.built<1||t.hp<t.maxHp)&&us.some(isTruck)){for(const u of us)if(isTruck(u))orderBuild(u,t);sfx('ack');return}
   if(t&&t.team===0&&t.kind==='u'&&t.hp<t.maxHp&&us.some(u=>u.st.util==='repair')){for(const u of us)if(u.st.util==='repair'){u.order=null;u.heal=t.id;u.path=[]}markers.push({x:t.x,y:t.y,life:.5,c:'#6f9'});sfx('ack');return}
   const n=us.length,cols=Math.ceil(Math.sqrt(n)),sp=34;

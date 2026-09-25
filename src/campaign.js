@@ -5,16 +5,18 @@ const ALL_TECH=RESEARCH.map(r=>r.id);
 function spawnUnits(team,list,x,y,extra){const out=[];
   list.forEach((k,i)=>{const d=typeof k==='string'?AI_T[k]:k,a=i*2.4,r=i?20+i*9:0,tx=tileOf(x+Math.cos(a)*r),ty=tileOf(y+Math.sin(a)*r),f=nearestFree(tx,ty,tx,ty);if(!f)return;
     const u=makeUnit(d,team,(f[0]+.5)*TILE,(f[1]+.5)*TILE);Object.assign(u,extra||{});u.home={x:u.x,y:u.y};out.push(u)});return out}
+const CORNERS=[[0,0],[1,1],[0,1],[1,0]]; // [flipX, flipY] for bottom-left, top-right, top-left, bottom-right
+function cornerTile(c,x,y,w){const[fx,fy]=CORNERS[c];return[fx?MW-x-w:x,fy?MH-y-w:y]}
 function stdBase(team,o={}){
-  const m=(x,y,w)=>team?[MW-x-w,MH-y-w]:[x,y];
-  makeBuilding('hq',team,...m(8,52,3),true);
-  if(o.factory!==false)makeBuilding('factory',team,...m(13,51,3),true);
-  const bx=(team?MW-P_BASE[0]:P_BASE[0])*TILE,by=(team?MH-P_BASE[1]:P_BASE[1])*TILE;
+  const c=o.corner??team,m=(x,y,w)=>cornerTile(c,x,y,w);
+  makeBuilding('hq',team,...m(8,MH-12,3),true);
+  if(o.factory!==false)makeBuilding('factory',team,...m(13,MH-13,3),true);
+  const bt=m(11,MH-11,0),bx=bt[0]*TILE,by=bt[1]*TILE;
   const near=oils.filter(p=>Math.hypot(p.x-bx,p.y-by)<460).sort((a,b)=>Math.hypot(a.x-bx,a.y-by)-Math.hypot(b.x-bx,b.y-by));
   for(let i=0;i<(o.derricks??1)&&i<near.length;i++)makeBuilding('derrick',team,near[i].tx,near[i].ty,true);
-  const c=team?[MW-P_BASE[0],MH-P_BASE[1]]:P_BASE,tw=team?[c[0]-6,c[1]+6]:[c[0]+6,c[1]-6];
-  for(const[type,n]of o.extra||[])for(let i=0;i<n;i++){const def=DEFENSES.includes(type)||type==='wall',s=findSpot(type,def?tw[0]:c[0],def?tw[1]:c[1]);if(s)makeBuilding(type,team,s[0],s[1],true)}
-  spawnUnits(team,o.units||['truck','truck','mgv','mgv'],(team?MW-12:12)*TILE,(team?MH-49:49)*TILE);
+  const tw=[bt[0]+(bt[0]<MW/2?6:-6),bt[1]+(bt[1]<MH/2?6:-6)];
+  for(const[type,n]of o.extra||[])for(let i=0;i<n;i++){const def=DEFENSES.includes(type)||type==='wall',s=findSpot(type,def?tw[0]:bt[0],def?tw[1]:bt[1]);if(s)makeBuilding(type,team,s[0],s[1],true)}
+  const sp=m(12,MH-15,0);spawnUnits(team,o.units||['truck','truck','mgv','mgv'],sp[0]*TILE,sp[1]*TILE);
 }
 const MISSIONS=[
   {name:'First Foothold',theme:'desert',seed:4101,

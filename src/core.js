@@ -2,7 +2,9 @@
 // =====================================================================
 // CORE: definitions, map, pathfinding, entities and simulation
 // =====================================================================
-const TILE=40,MW=64,MH=64,WW=MW*TILE,WH=MH*TILE,HUDH=170,HSTEP=20,HN=MW*2+1,AIR_H=80,UNIT_CAP=60;
+const TILE=40,HUDH=170,HSTEP=20,AIR_H=80,UNIT_CAP=60;
+let MW=64,MH=64,WW=MW*TILE,WH=MH*TILE,HN=MW*2+1;
+function setMapSize(n){MW=MH=n;WW=WH=n*TILE;HN=n*2+1}
 const $=id=>document.getElementById(id);
 const R=Math.random,dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y),clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const idx=(x,y)=>y*MW+x, inb=(x,y)=>x>=0&&y>=0&&x<MW&&y<MH, tileOf=v=>Math.floor(v/TILE);
@@ -10,7 +12,9 @@ function turnTo(a,b,m){let d=((b-a+Math.PI*3)%(Math.PI*2))-Math.PI;return Math.a
 function angDiff(a,b){return Math.abs(((b-a+Math.PI*3)%(Math.PI*2))-Math.PI)}
 
 // ---------- DEFINITIONS ----------
-const TEAM=[{main:0x4f8f3a,light:0x94d86c,dark:0x2c5220,mini:'#6f6',css:'#8f8'},{main:0xa13a30,light:0xea6d5c,dark:0x5a1d18,mini:'#f55',css:'#f88'}];
+const TEAM=[{main:0x4f8f3a,light:0x94d86c,dark:0x2c5220,mini:'#6f6',css:'#8f8'},{main:0xa13a30,light:0xea6d5c,dark:0x5a1d18,mini:'#f55',css:'#f88'},
+  {main:0x3a5fb0,light:0x7fa3ff,dark:0x1d2f60,mini:'#69f',css:'#8af'},{main:0xc07a20,light:0xffc060,dark:0x60380a,mini:'#fa4',css:'#fc7'}];
+const TEAM_NAMES=['Green','Red','Blue','Orange'];
 const BODIES={
   viper:{name:'Viper',hp:170,cost:30,spd:1.05,size:1,desc:'Light body. Cheap and quick.'},
   cobra:{name:'Cobra',hp:330,cost:65,spd:1,size:1.2,desc:'Medium body. A good all-rounder.'},
@@ -88,10 +92,11 @@ const DEFAULT_TEMPLATES=[
 ];
 
 // ---------- STATE ----------
-let rock,bldMap,oilMap,oils=[],hv,ents=[],byId=new Map(),nextId=1,power=[0,0],tech=[{},{}],sel=[],placing=null,projs=[],fx=[],decals=[],time=0,state='menu',paused=false,diff='normal',ai=null,stats={kills:0,lost:0,built:0},terrainCv,miniBg,lastAlert=-99,msgT=0,roadPts=[],world=null,markers=[];
+let rock,bldMap,oilMap,oils=[],hv,ents=[],byId=new Map(),nextId=1,power=[0,0],tech=[{},{}],sel=[],placing=null,projs=[],fx=[],decals=[],time=0,state='menu',paused=false,diff='normal',ais=[],stats={kills:0,lost:0,built:0},terrainCv,miniBg,lastAlert=-99,msgT=0,roadPts=[],world=null,markers=[];
 let explored,visible,fogCur,fogTex=null,fogCv=null,fogT=0,missionT=0;
-let mapSeed=0,themeId='desert',theme=THEMES.desert,templates=[[],[]],groups={},game={mode:'skirmish',mission:-1,ms:{}};
+let gameId=0,mapSeed=0,themeId='desert',theme=THEMES.desert,templates=[[],[]],groups={},game={mode:'skirmish',mission:-1,ms:{},teams:2,ally:[0,1]};
 const alive=e=>!!e&&e.hp>0&&byId.has(e.id);
+function hostile(a,b){const al=game.ally||[0,1,2,3];return a!==b&&al[a]!==al[b]}
 function blocked(tx,ty){return !inb(tx,ty)||rock[idx(tx,ty)]===1||bldMap[idx(tx,ty)]!==0}
 function edgeDist(a,b){return Math.hypot(a.x-b.x,a.y-b.y)-(b.kind==='b'?b.r:b.r*0.5)}
 function msg(t,d=3){$('msg').textContent=t;msgT=d}
@@ -117,27 +122,31 @@ function canHit(e,o){const w=wOf(e);if(!w||w.util)return false;if(isAir(o))retur
 
 // ---------- MAP ----------
 function rng(s){return function(){s|=0;s=s+0x6D2B79F5|0;let t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
-function setRock(x,y,v){x=Math.round(x);y=Math.round(y);if(inb(x,y)){rock[idx(x,y)]=v;rock[idx(MW-1-x,MH-1-y)]=v}}
+function setRock(x,y,v){x=Math.round(x);y=Math.round(y);if(inb(x,y)){rock[idx(x,y)]=v;rock[idx(MW-1-x,y)]=v;rock[idx(x,MH-1-y)]=v;rock[idx(MW-1-x,MH-1-y)]=v}}
 function disc(cx,cy,r,v){for(let y=Math.floor(cy-r);y<=cy+r;y++)for(let x=Math.floor(cx-r);x<=cx+r;x++)if((x-cx)**2+(y-cy)**2<=r*r)setRock(x,y,v)}
 function carve(x0,y0,x1,y1,r){const n=Math.ceil(Math.hypot(x1-x0,y1-y0))*2;for(let i=0;i<=n;i++)disc(x0+(x1-x0)*i/n,y0+(y1-y0)*i/n,r,0)}
-const P_BASE=[11,53],MIDC=[31.5,31.5];
-const OIL_HALF=[[6,47],[15,58],[18,48],[4,58],[22,40],[27,52],[30,34],[12,34]];
+// the map is mirrored into four corners; these give the bottom-left quarter
+const baseTile=()=>[11,MH-11];
+function oilQuarter(){const S=MW,b=baseTile(),o=[[b[0]-5,b[1]-6],[b[0]+4,b[1]+5],[b[0]+7,b[1]-5],[b[0]-7,b[1]+5]];
+  const f=[[.34,.63],[.42,.81],[.47,.53],[.19,.53]];if(S>64)f.push([.27,.72],[.12,.66],[.4,.93]);if(S>96)f.push([.22,.88],[.33,.57]);
+  for(const[fx,fy]of f)o.push([Math.round(fx*S),Math.round(fy*S)]);return o}
 function genMap(seed,tid,clears){
   theme=THEMES[tid];themeId=tid;mapSeed=seed;
   const r=rng(seed);rock=new Uint8Array(MW*MH);
   if(theme.gen==='city'){for(let by=1;by<MH;by+=8)for(let bx=1;bx<MW;bx+=8){if(r()<.18)continue;const w=2+Math.floor(r()*4),h=2+Math.floor(r()*4),ox=bx+1+Math.floor(r()*(7-w)),oy=by+1+Math.floor(r()*(7-h));for(let y=oy;y<oy+h;y++)for(let x=ox;x<ox+w;x++)setRock(x,y,1)}}
-  else for(let i=0;i<theme.rocks;i++){const cx=3+r()*(MW-6),cy=3+r()*(MH-6),rad=1.5+r()*3.2;disc(cx,cy,rad,1);for(let k=0;k<3;k++)disc(cx+(r()-.5)*rad*2.2,cy+(r()-.5)*rad*2.2,rad*.7,1)}
-  disc(P_BASE[0],P_BASE[1],10,0);
-  for(const o of OIL_HALF){carve(o[0],o[1],MIDC[0],MIDC[1],1.3);disc(o[0],o[1],2,0)}
-  carve(P_BASE[0],P_BASE[1],MIDC[0],MIDC[1],1.8);
-  for(const c of clears||[]){disc(c[0],c[1],c[2],0);carve(c[0],c[1],MIDC[0],MIDC[1],1.3)}
+  else for(let i=0;i<theme.rocks*(MW/64)**2;i++){const cx=3+r()*(MW-6),cy=3+r()*(MH-6),rad=1.5+r()*3.2;disc(cx,cy,rad,1);for(let k=0;k<3;k++)disc(cx+(r()-.5)*rad*2.2,cy+(r()-.5)*rad*2.2,rad*.7,1)}
+  const B=baseTile(),MID=[MW/2-.5,MH/2-.5],OQ=oilQuarter();
+  disc(B[0],B[1],10,0);
+  for(const o of OQ){carve(o[0],o[1],MID[0],MID[1],1.3);disc(o[0],o[1],2,0)}
+  carve(B[0],B[1],MID[0],MID[1],1.8);
+  for(const c of clears||[]){disc(c[0],c[1],c[2],0);carve(c[0],c[1],MID[0],MID[1],1.3)}
   for(let x=0;x<MW;x++)for(let y=0;y<MH;y++)if(x<2||y<2||x>=MW-2||y>=MH-2)rock[idx(x,y)]=1;
-  const seen=new Uint8Array(MW*MH),st=[idx(P_BASE[0],P_BASE[1])];seen[st[0]]=1;
+  const seen=new Uint8Array(MW*MH),st=[idx(B[0],B[1])];seen[st[0]]=1;
   while(st.length){const n=st.pop(),x=n%MW,y=n/MW|0;for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]]){const nx=x+dx,ny=y+dy;if(inb(nx,ny)&&!rock[idx(nx,ny)]&&!seen[idx(nx,ny)]){seen[idx(nx,ny)]=1;st.push(idx(nx,ny))}}}
   for(let i=0;i<MW*MH;i++)if(!seen[i])rock[i]=1;
   oils=[];oilMap=new Int16Array(MW*MH);
-  for(const o of OIL_HALF)for(const p of[[o[0],o[1]],[MW-1-o[0],MH-1-o[1]]]){oils.push({tx:p[0],ty:p[1],x:(p[0]+.5)*TILE,y:(p[1]+.5)*TILE,bid:0});oilMap[idx(p[0],p[1])]=oils.length}
-  roadPts=[[P_BASE[0]*TILE,P_BASE[1]*TILE],[MIDC[0]*TILE,MIDC[1]*TILE],[WW-P_BASE[0]*TILE,WH-P_BASE[1]*TILE]];
+  for(const o of OQ)for(const p of[[o[0],o[1]],[MW-1-o[0],o[1]],[o[0],MH-1-o[1]],[MW-1-o[0],MH-1-o[1]]]){if(!inb(p[0],p[1])||oilMap[idx(p[0],p[1])]||rock[idx(p[0],p[1])])continue;oils.push({tx:p[0],ty:p[1],x:(p[0]+.5)*TILE,y:(p[1]+.5)*TILE,bid:0});oilMap[idx(p[0],p[1])]=oils.length}
+  roadPts=[[B[0],B[1]],[MW-B[0],B[1]],[B[0],MH-B[1]],[MW-B[0],MH-B[1]]].map(p=>[[p[0]*TILE,p[1]*TILE],[MID[0]*TILE,MID[1]*TILE]]);
   hv=new Float32Array(HN*HN);
   const isR=(x,y)=>{const tx=tileOf(x),ty=tileOf(y);return !inb(tx,ty)||rock[idx(tx,ty)]?1:0},city=theme.gen==='city';
   for(let j=0;j<HN;j++)for(let i=0;i<HN;i++){const x=i*HSTEP,y=j*HSTEP;
@@ -149,15 +158,15 @@ function genMap(seed,tid,clears){
 function heightAt(x,y){const fx=clamp(x/HSTEP,0,HN-1.001),fy=clamp(y/HSTEP,0,HN-1.001),i=fx|0,j=fy|0,u=fx-i,v=fy-j;
   const a=hv[j*HN+i],b=hv[j*HN+i+1],c=hv[(j+1)*HN+i],d=hv[(j+1)*HN+i+1];return a*(1-u)*(1-v)+b*u*(1-v)+c*(1-u)*v+d*u*v}
 function buildTerrainTexture(r){
-  const T=theme;terrainCv=document.createElement('canvas');terrainCv.width=WW;terrainCv.height=WH;const g=terrainCv.getContext('2d');
+  const T=theme,k=Math.min(1,3072/WW),area=(MW/64)**2;terrainCv=document.createElement('canvas');terrainCv.width=terrainCv.height=Math.round(WW*k);const g=terrainCv.getContext('2d');g.scale(k,k);
   g.fillStyle=T.ground;g.fillRect(0,0,WW,WH);
-  for(let i=0;i<260;i++){const x=r()*WW,y=r()*WH,rad=40+r()*160,gr=g.createRadialGradient(x,y,0,x,y,rad);const c=r()<.5?T.blot[0]:T.blot[1];gr.addColorStop(0,`rgba(${c},${.25+r()*.25})`);gr.addColorStop(1,`rgba(${c},0)`);g.fillStyle=gr;g.fillRect(x-rad,y-rad,rad*2,rad*2)}
-  for(let i=0;i<30000;i++){g.fillStyle=r()<.5?T.speck[0]:T.speck[1];g.fillRect(r()*WW,r()*WH,1+r()*2,1+r()*2)}
+  for(let i=0;i<260*area;i++){const x=r()*WW,y=r()*WH,rad=40+r()*160,gr=g.createRadialGradient(x,y,0,x,y,rad);const c=r()<.5?T.blot[0]:T.blot[1];gr.addColorStop(0,`rgba(${c},${.25+r()*.25})`);gr.addColorStop(1,`rgba(${c},0)`);g.fillStyle=gr;g.fillRect(x-rad,y-rad,rad*2,rad*2)}
+  for(let i=0;i<30000*area;i++){g.fillStyle=r()<.5?T.speck[0]:T.speck[1];g.fillRect(r()*WW,r()*WH,1+r()*2,1+r()*2)}
   g.lineCap='round';g.lineJoin='round';
   const road=pts=>{g.strokeStyle='#1f1f1f';g.lineWidth=36;g.beginPath();pts.forEach((p,i)=>i?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1]));g.stroke();g.strokeStyle=T.road;g.lineWidth=30;g.stroke();g.strokeStyle='#d8c040';g.lineWidth=2;g.setLineDash([16,14]);g.stroke();g.setLineDash([])};
   if(T.gen==='city'){for(let k=1;k<MW;k+=8){road([[k*TILE,0],[k*TILE,WH]]);road([[0,k*TILE],[WW,k*TILE]])}}
-  road(roadPts);
-  for(let i=0;i<40;i++){const x=r()*WW,y=r()*WH;if(rock[idx(tileOf(x),tileOf(y))])continue;const rad=8+r()*14;const gr=g.createRadialGradient(x,y,0,x,y,rad);gr.addColorStop(0,'rgba(30,18,10,.8)');gr.addColorStop(.7,'rgba(70,40,20,.5)');gr.addColorStop(1,'rgba(160,110,60,0)');g.fillStyle=gr;g.beginPath();g.arc(x,y,rad,0,7);g.fill()}
+  for(const rp of roadPts)road(rp);
+  for(let i=0;i<40*area;i++){const x=r()*WW,y=r()*WH;if(rock[idx(tileOf(x),tileOf(y))])continue;const rad=8+r()*14;const gr=g.createRadialGradient(x,y,0,x,y,rad);gr.addColorStop(0,'rgba(30,18,10,.8)');gr.addColorStop(.7,'rgba(70,40,20,.5)');gr.addColorStop(1,'rgba(160,110,60,0)');g.fillStyle=gr;g.beginPath();g.arc(x,y,rad,0,7);g.fill()}
   if(T.gen==='city'){
     for(let y=0;y<MH;y++)for(let x=0;x<MW;x++)if(rock[idx(x,y)]){g.fillStyle=T.rockBase;g.fillRect(x*TILE,y*TILE,TILE,TILE);g.fillStyle=T.rock[Math.floor(r()*5)];g.fillRect(x*TILE+4,y*TILE+4,TILE-8,TILE-8);
       if(r()<.5){g.fillStyle='#2a2826';g.fillRect(x*TILE+8+r()*16,y*TILE+8+r()*16,8,8)}
@@ -186,7 +195,7 @@ function findPath(sx,sy,gx,gy){
   const heap=[];const push=(f,n)=>{heap.push([f,n]);let i=heap.length-1;while(i>0){const p=(i-1)>>1;if(heap[p][0]<=heap[i][0])break;[heap[p],heap[i]]=[heap[i],heap[p]];i=p}};
   const pop=()=>{const top=heap[0],last=heap.pop();if(heap.length){heap[0]=last;let i=0;for(;;){const l=i*2+1,r=l+1;let m=i;if(l<heap.length&&heap[l][0]<heap[m][0])m=l;if(r<heap.length&&heap[r][0]<heap[m][0])m=r;if(m===i)break;[heap[m],heap[i]]=[heap[i],heap[m]];i=m}}return top[1]};
   const s=idx(sx,sy),goal=idx(gx,gy);g[s]=0;push(hf(sx,sy),s);let best=s,bestH=hf(sx,sy),it=0;
-  while(heap.length&&it++<5000){const n=pop();if(closed[n])continue;closed[n]=1;if(n===goal){best=n;break}
+  while(heap.length&&it++<MW*MH*.7){const n=pop();if(closed[n])continue;closed[n]=1;if(n===goal){best=n;break}
     const x=n%MW,y=n/MW|0,h=hf(x,y);if(h<bestH){bestH=h;best=n}
     for(const[dx,dy]of DIRS){const nx=x+dx,ny=y+dy;if(blocked(nx,ny))continue;if(dx&&dy&&(blocked(x+dx,y)||blocked(x,y+dy)))continue;
       const ni=idx(nx,ny);if(closed[ni])continue;const ng=g[n]+(dx&&dy?1.4142:1);if(ng<g[ni]){g[ni]=ng;came[ni]=n;push(ng+hf(nx,ny),ni)}}}
@@ -238,20 +247,23 @@ function orderMove(u,x,y,t='move'){u.order={t,x,y};u.chasing=false;u.heal=0;setP
 function speedOf(u){return u.st.speed*(tech[u.team].engine?1.2:1)}
 
 function damage(t,d,team,src){
-  if(!alive(t)||t.team===team)return;
+  if(!alive(t)||!hostile(team,t.team))return;
   t.hp-=d*(tech[t.team].armor?1/1.35:1)*(t.kind==='u'?1-.04*t.rank:1);
   if(t.team===0&&time-lastAlert>15){lastAlert=time;msg(t.kind==='b'?'Our base is under attack!':'Our units are under attack!');sfx('alert');say(t.kind==='b'?'Base under attack':'Units under attack')}
-  if(t.hp<=0){kill(t);if(src&&alive(src)&&src.kind==='u')addKill(src)}
+  if(t.hp<=0){kill(t,team);if(src&&alive(src)&&src.kind==='u')addKill(src)}
 }
 function addKill(u){u.kills++;let r=0;for(let i=0;i<RANKS.length;i++)if(u.kills>=RANKS[i])r=i;
   if(r>u.rank){u.rank=r;if(u.team===0){msg(u.st.name+' promoted to '+RANK_NAMES[r],2.5);sfx('rankup');say('Unit promoted')}}}
-function kill(t){
+// delayed callback that is dropped if a new game has started in the meantime
+function later(fn,ms){const g=gameId;setTimeout(()=>{if(g===gameId)fn()},ms)}
+function kill(t,killer){
   t.hp=0;byId.delete(t.id);sfx(t.kind==='b'?'bigboom':'boom',t.x,t.y);
   boom(t.x,t.y,t.kind==='b'?t.r*.9:t.r*1.3,t.kind==='b'?60:26,t.h?heightAt(t.x,t.y)+t.h:undefined);addDecal(t.x,t.y,t.kind==='b'?t.r:t.r*1.4);
-  if(t.team===1)stats.kills++;else stats.lost++;
+  if(t.team===0)stats.lost++;else if(killer===0)stats.kills++;
   if(t.kind==='b'){for(let y=t.ty;y<t.ty+t.h;y++)for(let x=t.tx;x<t.tx+t.w;x++)if(bldMap[idx(x,y)]===t.id)bldMap[idx(x,y)]=0;
     if(t.type==='derrick')for(const o of oils)if(o.bid===t.id)o.bid=0;
-    if(t.type==='hq'&&(game.mode==='skirmish'||t.team===0))setTimeout(()=>endGame(t.team===1,t.team===0?'Your Command Center was destroyed.':''),1500)}
+    if(t.type==='hq'){if(t.team===0)later(()=>endGame(false,'Your Command Center was destroyed.'),1500);
+      else if(game.mode==='skirmish'){if(ents.some(e=>e.type==='hq'&&e.hp>0&&hostile(0,e.team)))msg(TEAM_NAMES[t.team]+' has been defeated!',4);else later(()=>endGame(true,'All enemy Command Centers destroyed!'),1500)}}}
   sel=sel.filter(e=>e!==t);
 }
 
@@ -263,7 +275,7 @@ function addDecal(x,y,r){const d={x,y,r:r+R()*6};decals.push(d);if(world){d.mesh
 
 // ---------- COMBAT ----------
 function findTarget(e,range,minR=0){let best=null,bs=1e9;
-  for(const o of ents){if(o.team===e.team||o.hp<=0||o.stranded||(e.team===0&&!shown(o))||!canHit(e,o))continue;const d=edgeDist(e,o);if(d>range||d<minR)continue;
+  for(const o of ents){if(!hostile(e.team,o.team)||o.hp<=0||o.stranded||(e.team===0&&!shown(o))||!canHit(e,o))continue;const d=edgeDist(e,o);if(d>range||d<minR)continue;
     const s=d+(o.kind==='b'?(o.type==='wall'?220:80):0)+(isTruck(o)?30:0);if(s<bs){bs=s;best=o}}return best}
 const PROJ_SPEED={mg:950,cannon:560,rocket:620,mortar:330,flak:800,bomb:260};
 function fire(e,t){
@@ -293,7 +305,11 @@ function moveAlong(u,dt){
   if(!u.path.length)return true;
   const[px,py]=u.path[0],dx=px-u.x,dy=py-u.y,d=Math.hypot(dx,dy),sp=speedOf(u)*dt;
   u.angle=turnTo(u.angle,Math.atan2(dy,dx),5*dt);
-  if(d<=sp){u.x=px;u.y=py;u.path.shift()}else{u.x+=dx/d*sp;u.y+=dy/d*sp}
+  let nx,ny;if(d<=sp){nx=px;ny=py}else{nx=u.x+dx/d*sp;ny=u.y+dy/d*sp}
+  // slide along cliffs and buildings instead of driving into them; ask for a new route if boxed in
+  if(blocked(tileOf(nx),tileOf(ny))&&!blocked(tileOf(u.x),tileOf(u.y))){
+    if(!blocked(tileOf(nx),tileOf(u.y)))ny=u.y;else if(!blocked(tileOf(u.x),tileOf(ny)))nx=u.x;else{u.stuck=Math.max(u.stuck,1.3);return false}}
+  u.x=nx;u.y=ny;if(d<=sp)u.path.shift();
   u.tread+=sp;return !u.path.length;
 }
 function updateUnit(u,dt){
@@ -301,7 +317,8 @@ function updateUnit(u,dt){
   if(u.stranded)return;
   if(u.st.air){updateAir(u,dt);return}
   u.stuck+=dt;if(u.stuck>1.2){const mv=Math.hypot(u.x-u.lx,u.y-u.ly);u.lx=u.x;u.ly=u.y;u.stuck=0;
-    if(u.path.length&&mv<6&&u.order&&u.order.x!==undefined){if(Math.hypot(u.x-u.order.x,u.y-u.order.y)<70){u.path=[];if(u.order.t==='move'||u.order.t==='amove'){u.order=null;u.home={x:u.x,y:u.y}}}else setPath(u,u.order.x,u.order.y)}}
+    if(u.path.length&&mv<6&&u.order&&u.order.t==='build'){const b=byId.get(u.order.id);if(b)setPath(u,b.x,b.y)}
+    else if(u.path.length&&mv<6&&u.order&&u.order.x!==undefined){if(Math.hypot(u.x-u.order.x,u.y-u.order.y)<70){u.path=[];if(u.order.t==='move'||u.order.t==='amove'){u.order=null;u.home={x:u.x,y:u.y}}}else setPath(u,u.order.x,u.order.y)}}
   if(u.st.util==='truck'){updateTruck(u,dt);return}
   if(u.st.util==='repair'){updateRepairUnit(u,dt);return}
   const w=u.st.w,range=w.range;
@@ -392,21 +409,22 @@ function updateBuilding(b,dt){
 }
 function onResearch(team,r){tech[team][r.id]=true;
   if(team===0){msg('Research complete: '+r.name);sfx('complete');say('Research completed');const n=addDefaultTemplates(0);if(n)setTimeout(()=>msg('New unit designs are available in your Factory',3),1500)}}
+const towardY=b=>b.y<WH/2?1:-1;
 function spawnUnit(b,d){
   const st=calcStats(d);if(b.team===0)stats.built++;
-  if(st.air){const u=makeUnit(d,b.team,b.x,b.y+20);u.home={x:b.x+(R()-.5)*80,y:b.y+(b.team?-90:90)};if(b.rally)u.order={t:'move',x:b.rally.x,y:b.rally.y};return u}
-  const f=nearestFree(b.tx+1,b.ty+b.h,b.tx+1,b.ty+b.h+(b.team?-3:3));if(!f)return null;
+  if(st.air){const u=makeUnit(d,b.team,b.x,b.y+20);u.home={x:b.x+(R()-.5)*80,y:b.y+90*towardY(b)};if(b.rally)u.order={t:'move',x:b.rally.x,y:b.rally.y};return u}
+  const f=nearestFree(b.tx+1,b.ty+b.h,b.tx+1,b.ty+b.h+3*towardY(b));if(!f)return null;
   const u=makeUnit(d,b.team,(f[0]+.5)*TILE,(f[1]+.5)*TILE);
   if(b.rally)orderMove(u,b.rally.x+(R()-.5)*40,b.rally.y+(R()-.5)*40);
-  else orderMove(u,u.x+(R()-.5)*80,u.y+(b.team?-1:1)*(40+R()*50));
+  else orderMove(u,u.x+(R()-.5)*80,u.y+towardY(b)*(40+R()*50));
   return u;
 }
-function incomeOf(t){let r=0;for(const e of ents)if(e.team===t&&e.kind==='b'&&e.built>=1){if(e.type==='hq')r+=1;if(e.type==='derrick')r+=2.6*(tech[t].oil?1.5:1)}return r*(t===1&&ai?ai.inc:1)}
+function incomeOf(t){let r=0;for(const e of ents)if(e.team===t&&e.kind==='b'&&e.built>=1){if(e.type==='hq')r+=1;if(e.type==='derrick')r+=2.6*(tech[t].oil?1.5:1)}return r*(t>0&&ais[t]?ais[t].inc:1)}
 
 // ---------- MAIN UPDATE ----------
 function update(dt){
   time+=dt;
-  for(let t=0;t<2;t++)power[t]+=incomeOf(t)*dt;
+  for(let t=0;t<power.length;t++)power[t]+=incomeOf(t)*dt;
   for(const e of ents){if(e.hp<=0)continue;if(e.kind==='u')updateUnit(e,dt);else updateBuilding(e,dt)}
   const us=ents.filter(e=>e.kind==='u'&&e.hp>0&&!e.st.air),as=ents.filter(e=>e.kind==='u'&&e.hp>0&&e.st.air);
   for(const u of us){u.sx=u.x;u.sy=u.y}
@@ -419,7 +437,7 @@ function update(dt){
     if(p.proj==='rocket'&&R()<.8)fx.push({t:'p',k:'smoke',x:p.x,y:p.y,h:p.hh||heightAt(p.x,p.y)+14,vx:0,vy:0,vh:8,life:.6,max:1.6});
     const dx=p.tx-p.x,dy=p.ty-p.y,d=Math.hypot(dx,dy),s=p.sp*dt;
     if(d<=s){p.dead=true;if(p.mesh)world.remove(p.mesh);const src=byId.get(p.src);
-      if(p.proj==='mortar'||p.proj==='bomb'){for(const o of ents)if(o.team!==p.team&&o.hp>0&&!isAir(o)&&!o.stranded&&edgeDist({x:p.tx,y:p.ty},o)<=p.splash)damage(o,p.dmg*(o.kind==='b'?1:.85),p.team,src);
+      if(p.proj==='mortar'||p.proj==='bomb'){for(const o of ents)if(hostile(p.team,o.team)&&o.hp>0&&!isAir(o)&&!o.stranded&&edgeDist({x:p.tx,y:p.ty},o)<=p.splash)damage(o,p.dmg*(o.kind==='b'?1:.85),p.team,src);
         boom(p.tx,p.ty,16,22);addDecal(p.tx,p.ty,14);sfx('boom',p.tx,p.ty)}
       else if(t)damage(t,p.dmg*(p.air&&p.proj==='mg'?.6:1),p.team,src);
       const gh=heightAt(p.tx,p.ty)+(p.th||0);
@@ -431,7 +449,7 @@ function update(dt){
   for(const f of fx){f.life-=dt;if(f.t==='p'){f.x+=f.vx*dt;f.y+=f.vy*dt;f.h+=f.vh*dt;f.vx*=.94;f.vy*=.94;if(f.k==='fire')f.vh-=150*dt}}
   fx=fx.filter(f=>f.life>0);
   if(ents.some(e=>e.hp<=0))ents=ents.filter(e=>e.hp>0);
-  if(ai.mode==='waves')aiWaves(dt);else{ai.t-=dt;if(ai.t<=0){ai.t=1;aiThink()}}
+  for(let t=1;t<ais.length;t++){const a=ais[t];if(!a)continue;if(a.mode==='waves')aiWaves(t,dt);else{a.t-=dt;if(a.t<=0){a.t=1;aiThink(t)}}}
   fogT-=dt;if(fogT<=0){fogT=.2;updateFog()}
   missionTick(dt);
 }
@@ -441,5 +459,5 @@ function sightOf(e){if(e.kind==='u')return e.st.air?330:e.d.weapon==='mortar'?30
 function updateFog(){visible.fill(0);
   for(const e of ents){if(e.team!==0||e.hp<=0||e.stranded)continue;const r=sightOf(e)/TILE,cx=e.x/TILE,cy=e.y/TILE;
     for(let y=Math.max(0,Math.floor(cy-r));y<=Math.min(MH-1,Math.ceil(cy+r));y++)for(let x=Math.max(0,Math.floor(cx-r));x<=Math.min(MW-1,Math.ceil(cx+r));x++)if((x+.5-cx)**2+(y+.5-cy)**2<=r*r){visible[idx(x,y)]=1;explored[idx(x,y)]=1}}
-  for(const e of ents)if(e.team===1&&e.kind==='b'&&!e.seen){for(let y=e.ty;y<e.ty+e.h&&!e.seen;y++)for(let x=e.tx;x<e.tx+e.w;x++)if(visible[idx(x,y)]){e.seen=true;break}}}
+  for(const e of ents)if(e.team!==0&&e.kind==='b'&&!e.seen){for(let y=e.ty;y<e.ty+e.h&&!e.seen;y++)for(let x=e.tx;x<e.tx+e.w;x++)if(visible[idx(x,y)]){e.seen=true;break}}}
 function shown(e){if(e.team===0)return true;if(e.kind==='b')return !!e.seen;const tx=tileOf(e.x),ty=tileOf(e.y);return inb(tx,ty)&&visible[idx(tx,ty)]===1}
