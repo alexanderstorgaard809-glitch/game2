@@ -324,11 +324,13 @@ function updateUnit(u,dt){
   combat(u,dt,want);
 }
 function nextBuild(u){while(u.bq&&u.bq.length){const n=byId.get(u.bq.shift());if(n&&(n.built<1||n.hp<n.maxHp)){u.order={t:'build',id:n.id};u.path=[];u.repath=0;return}}u.order=null;u.path=[];u.home={x:u.x,y:u.y}}
+// true when the truck stands on a tile touching the building (diagonals included)
+function nearFootprint(u,b){const tx=tileOf(u.x),ty=tileOf(u.y),dx=Math.max(b.tx-tx,0,tx-(b.tx+b.w-1)),dy=Math.max(b.ty-ty,0,ty-(b.ty+b.h-1));return Math.max(dx,dy)<=1||(!u.path.length&&edgeDist(u,b)<=60)}
 function updateTruck(u,dt){
   const o=u.order;
   if(o&&o.t==='build'){const b=byId.get(o.id);
     if(!b||(b.built>=1&&b.hp>=b.maxHp)){nextBuild(u);return}
-    if(edgeDist(u,b)<=38){u.path=[];u.angle=turnTo(u.angle,Math.atan2(b.y-u.y,b.x-u.x),4*dt);u.turret+=dt*3;u.healT=b.id;
+    if(nearFootprint(u,b)){u.path=[];u.angle=turnTo(u.angle,Math.atan2(b.y-u.y,b.x-u.x),4*dt);u.turret+=dt*3;u.healT=b.id;
       if(b.built<1){const d=BDEF[b.type],st=dt/d.time;b.built=Math.min(1,b.built+st);b.hp=Math.min(b.maxHp,b.hp+b.maxHp*.9*st);
         if(b.built>=1){b.hp=Math.max(b.hp,b.maxHp*.6);if(b.team===0){msg(BDEF[b.type].name+' completed');if(b.type!=='wall'){sfx('complete');say('Structure complete')}}}}
       else b.hp=Math.min(b.maxHp,b.hp+45*dt);
@@ -336,8 +338,8 @@ function updateTruck(u,dt){
     else{u.repath-=dt;if(!u.path.length&&u.repath<=0){u.repath=1;setPath(u,b.x,b.y)}moveAlong(u,dt)}
     return}
   if(o){if(moveAlong(u,dt)){u.order=null;u.home={x:u.x,y:u.y}}return}
-  // idle trucks repair damaged buildings nearby
-  if(u.scan<=0){u.scan=1+R()*.5;let best=null,bd=320;for(const b of ents)if(b.team===u.team&&b.kind==='b'&&b.built>=1&&b.hp<b.maxHp*.9){const d=dist(b,u);if(d<bd){bd=d;best=b}}if(best)orderBuild(u,best)}
+  // idle trucks finish unfinished buildings and repair damaged ones nearby
+  if(u.scan<=0){u.scan=1+R()*.5;let best=null,bd=1e9;for(const b of ents)if(b.team===u.team&&b.kind==='b'&&(b.built<1||b.hp<b.maxHp*.9)){const d=dist(b,u)-(b.built<1?300:0);if(d<(b.built<1?300:320)&&d<bd){bd=d;best=b}}if(best)orderBuild(u,best)}
 }
 function updateRepairUnit(u,dt){
   const w=u.st.w,o=u.order;

@@ -213,7 +213,7 @@ function finishWall(keep){const w=mouse.world,line=w?wallLine(placing.start,[til
 function tryPlace(wx,wy,keep){const d=BDEF[placing.type],tx=Math.round(wx/TILE-d.w/2),ty=Math.round(wy/TILE-d.h/2);
   if(power[0]<d.cost)return deny('Not enough power!');
   if(!canPlace(placing.type,tx,ty))return deny(placing.type==='derrick'?'Derricks must be built on free oil resources':'Cannot build there');
-  const b=placeBuilding(placing.type,0,tx,ty);for(const t of sel.filter(e=>isTruck(e)&&e.team===0))orderBuild(t,b,keep);sfx('place');if(!keep)placing=null}
+  const b=placeBuilding(placing.type,0,tx,ty);for(const t of sel.filter(e=>isTruck(e)&&e.team===0))orderBuild(t,b,true);sfx('place');if(!keep)placing=null}
 function rightClick(wx,wy,t){
   const own=sel.filter(e=>e.team===0&&!e.stranded);if(!own.length)return;
   if(own.length===1&&own[0].kind==='b'){if(own[0].type==='factory'){own[0].rally={x:wx,y:wy};markers.push({x:wx,y:wy,life:.5,c:'#8f8'});sfx('ack')}return}
