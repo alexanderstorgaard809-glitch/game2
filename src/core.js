@@ -2,7 +2,8 @@
 // =====================================================================
 // CORE: definitions, map, pathfinding, entities and simulation
 // =====================================================================
-const TILE=40,HUDH=170,HSTEP=20,AIR_H=80,UNIT_CAP=60;
+const TILE=40,HUDH=170,HSTEP=20,AIR_H=80;
+const unitCap=()=>game.cap||60;
 let MW=64,MH=64,WW=MW*TILE,WH=MH*TILE,HN=MW*2+1;
 function setMapSize(n){MW=MH=n;WW=WH=n*TILE;HN=n*2+1}
 const $=id=>document.getElementById(id);
@@ -465,7 +466,7 @@ function updateBuilding(b,dt){
   b.healT=0;
   if((b.type==='factory'||b.type==='cyborgFactory')&&b.queue.length){b.prog+=dt;const st=calcStats(b.queue[0]);
     if(b.prog>=st.time){const cnt=ents.filter(e=>e.kind==='u'&&e.team===b.team).length;
-      if(cnt<UNIT_CAP){b.prog=0;spawnUnit(b,b.queue.shift());if(b.team===0){sfx('ready');say('Unit ready')}}else b.prog=st.time}}
+      if(cnt<unitCap()){b.prog=0;spawnUnit(b,b.queue.shift());if(b.team===0){sfx('ready');say('Unit ready')}}else b.prog=st.time}}
   if(b.type==='research'&&b.res){b.res.prog+=dt;const r=RESEARCH.find(x=>x.id===b.res.id);
     if(b.res.prog>=r.time){b.res=null;onResearch(b.team,r)}}
   if(b.sw){b.cd-=dt;b.scan-=dt;if(b.scan<=0){b.scan=.3;b.auto=findTarget(b,b.sw.range,b.sw.minRange||0)}combat(b,dt,null)}

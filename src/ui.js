@@ -2,7 +2,7 @@
 // UI: HUD, unit designer, menus, input, save/load and game flow
 // =====================================================================
 const mouse={x:0,y:0,in:false,world:null},keys={};let drag=null,rot=null,lastClick={t:0,key:null},lastGroupKey={k:null,t:0};
-let autoT=0,inGameMenu=false,menuPrevPause=false,sk={map:'desert',size:64,ais:1,mode:'vs',diff:'normal',weather:'clear',allies:[false,false,false]};
+let autoT=0,inGameMenu=false,menuPrevPause=false,sk={map:'desert',size:64,ais:1,mode:'vs',diff:'normal',cap:60,weather:'clear',allies:[false,false,false]};
 function uiOpen(){return !$('designer').hidden||!$('techtree').hidden||!$('editor').hidden||$('overlay').style.display!=='none'}
 function lsGet(k){try{return localStorage.getItem(k)}catch(e){return null}}
 function lsSet(k,v){try{localStorage.setItem(k,v);return true}catch(e){return false}}
@@ -72,7 +72,7 @@ function updateHud(){
   for(const f of refs)f();
   $('power').textContent=Math.floor(power[0]);$('pbar').firstChild.style.width=Math.min(100,power[0]/20)+'%';
   $('income').textContent='+'+incomeOf(0).toFixed(1)+'/s';
-  $('counts').textContent='Units '+ents.filter(e=>e.team===0&&e.kind==='u').length+'/'+UNIT_CAP+' · Kills '+stats.kills;
+  $('counts').textContent='Units '+ents.filter(e=>e.team===0&&e.kind==='u').length+'/'+unitCap()+' · Kills '+stats.kills;
 }
 
 // ---------- UNIT DESIGNER ----------
@@ -148,6 +148,7 @@ function skirmishMenu(){
   showMenu(`<h1>SKIRMISH</h1>${row('Map','map',Object.keys(THEMES).map(k=>[k,THEMES[k].name]).concat(Object.keys(maps).map(n=>['custom:'+n,n+' (custom)'])))}
   ${cm?'':row('Map size','size',[[64,'Small'],[96,'Medium'],[128,'Large'],[192,'Huge']])}
   ${row('Opponents','ais',aiOpts)}${teams}${enemies>1?row('Enemies','mode',[['vs','Team up against you'],['ffa','Fight each other too']]):''}
+  ${row('Unit limit','cap',[[60,'60'],[100,'100'],[150,'150']])}${sk.cap>60?'<p class="sub">Big armies can make the game slower on older computers.</p>':''}
   ${row('Weather','weather',Object.keys(WEATHER).map(k=>[k,WEATHER[k].name]))}${row('Difficulty','diff',[['easy','Easy'],['normal','Normal'],['hard','Hard']])}
   ${enemies?'':'<p class="sub">Make at least one AI an enemy.</p>'}
   <div><button class="big" ${enemies?'':'disabled'} onclick="newSkirmish(JSON.parse(JSON.stringify(sk)))">Start game</button><button class="big" onclick="mainMenu()">Back</button></div>`)}
@@ -262,7 +263,7 @@ function beginPlay(){updateFog();state='play';inGameMenu=false;hideMenu();$('des
 function newSkirmish(o){sk=JSON.parse(JSON.stringify(o));audioInit();
   const custom=o.map.startsWith('custom:')?loadCustomMap(o.map.slice(7)):null;setMapSize(custom?custom.size:o.size);const N=o.ais+1;
   const ally=[0];for(let t=1;t<N;t++)ally.push(o.allies[t-1]?0:o.mode==='ffa'?t:1);
-  game={mode:'skirmish',mission:-1,ms:{},teams:N,ally,sk:JSON.parse(JSON.stringify(o)),custom};diff=o.diff;weather=o.weather||'clear';
+  game={mode:'skirmish',mission:-1,ms:{},cap:o.cap||60,teams:N,ally,sk:JSON.parse(JSON.stringify(o)),custom};diff=o.diff;weather=o.weather||'clear';
   startWorld(Math.floor(R()*1e9),custom?custom.theme:o.map,[],custom);
   power=Array(N).fill(1000);tech=Array.from({length:N},()=>({}));templates=Array.from({length:N},()=>[]);addDefaultTemplates(0);initStats(N);
   const D=DIFF[o.diff],first=Math.round(D.first*(.8+.2*MW/64));
