@@ -2,8 +2,8 @@
 // UI: HUD, unit designer, menus, input, save/load and game flow
 // =====================================================================
 const mouse={x:0,y:0,in:false,world:null},keys={};let drag=null,rot=null,lastClick={t:0,key:null},lastGroupKey={k:null,t:0};
-let inGameMenu=false,menuPrevPause=false,sk={map:'desert',size:64,ais:1,mode:'vs',diff:'normal'};
-function uiOpen(){return !$('designer').hidden||$('overlay').style.display!=='none'}
+let inGameMenu=false,menuPrevPause=false,sk={map:'desert',size:64,ais:1,mode:'vs',diff:'normal',weather:'clear',allies:[false,false,false]};
+function uiOpen(){return !$('designer').hidden||!$('editor').hidden||$('overlay').style.display!=='none'}
 function lsGet(k){try{return localStorage.getItem(k)}catch(e){return null}}
 function lsSet(k,v){try{localStorage.setItem(k,v);return true}catch(e){return false}}
 function showMenu(html){$('obox').innerHTML=html;$('overlay').style.display='flex'}
@@ -29,6 +29,7 @@ function rebuildPanel(){
   if(own.some(isTruck))for(const t of BUILD_LIST){const d=BDEF[t];if(!avail(0,d))continue;
     const b=mkBtn(d.name,d.cost,thumbB(t),d.desc,()=>{placing={type:t};if(t==='derrick')msg('Click on a burning oil resource to build a derrick',2);if(t==='wall')msg('Click and drag to build a line of walls',2)});
     refs.push(()=>b.classList.toggle('dis',power[0]<d.cost))}
+  if(own.some(e=>e.kind==='u'&&e.st.util==='transport'))mkBtn('Unload','',textIcon('⇩','#6cf'),'Drop off all carried units below the transport (U)',unloadSel);
   if(own.length===1&&own[0].kind==='b'){const f=own[0];
     if(f.built>=1&&f.type==='factory'){
       for(const tp of templates[0]){if(!designOk(0,tp))continue;const st=calcStats(tp),key=dkey(tp);
@@ -47,8 +48,9 @@ function rebuildPanel(){
   refs.push(()=>{let t;
     if(sel.length===1){const e=sel[0];t=(e.team?TEAM_NAMES[e.team]+' ':'')+unitLabel(e)+'  —  HP '+Math.ceil(e.hp)+'/'+e.maxHp;
       if(e.kind==='u'&&e.rank)t+='  ·  '+RANK_NAMES[e.rank]+' ('+e.kills+' kills)';
-      if(e.kind==='u'&&e.st.air)t+='  ·  Ammo '+e.ammo+'/'+(VTOL_AMMO[e.d.weapon]||4)+(e.rearming?' (rearming)':'');
+      if(e.kind==='u'&&e.st.air&&!e.st.util)t+='  ·  Ammo '+e.ammo+'/'+(VTOL_AMMO[e.d.weapon]||4)+(e.rearming?' (rearming)':'');
       if(e.kind==='b'&&e.built<1)t+='  (under construction '+Math.floor(e.built*100)+'%)';
+      if(e.kind==='u'&&e.st.util==='transport')t+='  ·  Cargo '+cargoOf(e).length+'/'+e.st.w.cap+'. Right-click it with units to board, U to unload';
       if(e.type==='derrick'&&e.built>=1)t+='  (+'+(2.6*(tech[e.team].oil?1.5:1)).toFixed(1)+' power/s)';
       if(e.team===0&&e.type==='factory'&&e.built>=1)t+='  ·  Right-click the map to set a rally point'}
     else{const c={};for(const e of sel){const n=unitLabel(e);c[n]=(c[n]||0)+1}t=sel.length+' selected: '+Object.entries(c).map(([k,v])=>v+'× '+k).join(', ')}
@@ -76,8 +78,9 @@ function renderDesigner(){
   const st=calcStats(dz),err=designError(dz),w=st.w;$('dImg').src=thumbUnit(dz);$('dName').textContent=st.name;
   const rows=[['Hit points',st.hp],['Speed',Math.round(st.speed)],['Cost','⚡'+st.cost],['Build time',st.time+' s']];
   if(w.util==='truck')rows.push(['Role','Builds and repairs structures']);else if(w.util==='repair')rows.push(['Role','Repairs '+w.heal+' HP per second']);
+  else if(w.util==='transport')rows.push(['Role','Carries '+w.cap+' ground units']);else if(w.util==='sensor')rows.push(['Role','Sees very far, spots targets for artillery']);
   else{rows.push(['Damage',Math.round(w.dmg)+(w.splash?' (splash)':'')]);rows.push(['Range',w.range]);rows.push(['Targets',w.airOnly?'Air only':w.air?'Ground and air':'Ground only'])}
-  if(st.air)rows.push(['Ammo',(VTOL_AMMO[dz.weapon]||4)+' shots, rearms at a VTOL Pad']);
+  if(st.air&&!w.util)rows.push(['Ammo',(VTOL_AMMO[dz.weapon]||4)+' shots, rearms at a VTOL Pad']);
   $('dStats').innerHTML=rows.map(r=>'<tr><td>'+r[0]+'</td><td>'+r[1]+'</td></tr>').join('');
   const dup=templates[0].some(t=>dkey(t)===dkey(dz));
   $('dErr').textContent=err||(dup?'You already have this design.':!designOk(0,dz)?'Some parts are still locked.':'');
@@ -94,7 +97,7 @@ function progress(){return +(lsGet('if_progress')||0)}
 function mainMenu(){state='menu';inGameMenu=false;$('obj').hidden=true;$('designer').hidden=true;
   showMenu(`<h1>IRON FRONTIER</h1><p class="sub">A 3D real-time strategy game</p><div class="menu-list">
   <button class="big" onclick="campaignMenu()">Campaign</button><button class="big" onclick="skirmishMenu()">Skirmish</button>
-  <button class="big" onclick="slotsMenu('load')">Load game</button><button class="big" onclick="helpMenu()">How to play</button></div>`)}
+  <button class="big" onclick="slotsMenu('load')">Load game</button><button class="big" onclick="openEditor()">Map editor</button><button class="big" onclick="helpMenu()">How to play</button></div>`)}
 function campaignMenu(){const p=progress();
   showMenu(`<h1>CAMPAIGN</h1><div class="menu-list">${MISSIONS.map((m,i)=>`<button class="mission" ${i>p?'disabled':''} onclick="briefing(${i})"><b>Mission ${i+1}: ${esc(m.name)}</b><small>${i>p?'Locked: complete the previous mission':THEMES[m.theme].name}</small></button>`).join('')}
   <button class="big" onclick="mainMenu()">Back</button></div>`)}
@@ -103,11 +106,19 @@ function briefing(i){const M=MISSIONS[i];
   <div class="dlabel">Objectives</div><ul>${M.objectives.map(o=>'<li>'+esc(o.text)+(o.timer?' ('+fmtTime(o.timer)+')':'')+'</li>').join('')}<li>Keep your Command Center alive</li></ul>
   <div><button class="big" onclick="startMission(${i})">Start mission</button><button class="big" onclick="campaignMenu()">Back</button></div>`)}
 function skirmishMenu(){
-  const row=(label,key,opts)=>`<div class="dlabel">${label}</div><div class="chips center">${opts.map(([v,t])=>`<button class="chip${sk[key]===v?' on':''}" onclick="sk.${key}=${typeof v==='string'?"'"+v+"'":v};skirmishMenu()">${t}</button>`).join('')}</div>`;
-  showMenu(`<h1>SKIRMISH</h1>${row('Map','map',Object.keys(THEMES).map(k=>[k,THEMES[k].name]))}${row('Map size','size',[[64,'Small'],[96,'Medium'],[128,'Large']])}
-  ${row('Opponents','ais',[[1,'1 AI'],[2,'2 AIs'],[3,'3 AIs']])}${sk.ais>1?row('Alliances','mode',[['vs','AIs team up against you'],['ffa','Free for all']]):''}
-  ${row('Difficulty','diff',[['easy','Easy'],['normal','Normal'],['hard','Hard']])}
-  <div><button class="big" onclick="newSkirmish({...sk})">Start game</button><button class="big" onclick="mainMenu()">Back</button></div>`)}
+  const maps=customMaps(),cm=sk.map.startsWith('custom:')?maps[sk.map.slice(7)]:null;if(sk.map.startsWith('custom:')&&!cm)sk.map='desert';
+  const maxAI=cm?Math.min(3,cm.starts.length-1):3;if(sk.ais>maxAI)sk.ais=maxAI;
+  const q=v=>typeof v==='string'?"'"+v.replace(/'/g,"\\'")+"'":v;
+  const row=(label,key,opts)=>`<div class="dlabel">${label}</div><div class="chips center">${opts.map(([v,t])=>`<button class="chip${sk[key]===v?' on':''}" onclick="sk.${key}=${esc(q(v))};skirmishMenu()">${esc(t)}</button>`).join('')}</div>`;
+  const aiOpts=[[1,'1 AI'],[2,'2 AIs'],[3,'3 AIs']].filter(o=>o[0]<=maxAI);
+  const teams=`<div class="dlabel">Teams</div><div class="chips center">${[1,2,3].slice(0,sk.ais).map(t=>`<button class="chip${sk.allies[t-1]?' on':''}" onclick="sk.allies[${t-1}]=!sk.allies[${t-1}];skirmishMenu()">${TEAM_NAMES[t]}: ${sk.allies[t-1]?'Ally':'Enemy'}</button>`).join('')}</div>`;
+  const enemies=[1,2,3].slice(0,sk.ais).filter(t=>!sk.allies[t-1]).length;
+  showMenu(`<h1>SKIRMISH</h1>${row('Map','map',Object.keys(THEMES).map(k=>[k,THEMES[k].name]).concat(Object.keys(maps).map(n=>['custom:'+n,n+' (custom)'])))}
+  ${cm?'':row('Map size','size',[[64,'Small'],[96,'Medium'],[128,'Large']])}
+  ${row('Opponents','ais',aiOpts)}${teams}${enemies>1?row('Enemies','mode',[['vs','Team up against you'],['ffa','Fight each other too']]):''}
+  ${row('Weather','weather',Object.keys(WEATHER).map(k=>[k,WEATHER[k].name]))}${row('Difficulty','diff',[['easy','Easy'],['normal','Normal'],['hard','Hard']])}
+  ${enemies?'':'<p class="sub">Make at least one AI an enemy.</p>'}
+  <div><button class="big" ${enemies?'':'disabled'} onclick="newSkirmish(JSON.parse(JSON.stringify(sk)))">Start game</button><button class="big" onclick="mainMenu()">Back</button></div>`)}
 function helpMenu(){showMenu(`<h1>HOW TO PLAY</h1><ul>
   <li><b>Select</b> units by dragging a box or clicking. Double-click selects all units of that design.</li>
   <li><b>Right-click</b> to move or attack. Right-click a damaged building with trucks to repair it.</li>
@@ -118,6 +129,8 @@ function helpMenu(){showMenu(`<h1>HOW TO PLAY</h1><ul>
   <li><b>Veterans:</b> units that destroy enemies earn ranks (yellow chevrons) and get stronger.</li>
   <li><b>Repair</b> with Repair Trucks, a Repair Facility, or trucks for buildings. VTOLs repair and rearm on VTOL Pads.</li>
   <li><b>Groups:</b> Ctrl + 1-9 (or Shift + 1-9) saves a group. Press the number to select it, twice to jump to it.</li>
+  <li><b>Transport:</b> right-click a Transport with ground units to board, then fly it and press U to unload.</li>
+  <li><b>Radar:</b> Radar Towers and Radar Turrets see far. Mortars fire at everything they spot.</li>
   <li><b>Keys:</b> H = base, G = select army, P = pause, M = sound, Esc = menu.</li></ul>
   <button class="big" onclick="mainMenu()">Back</button>`)}
 function openGameMenu(){if(state!=='play'||inGameMenu)return;if(!$('designer').hidden)closeDesigner();inGameMenu=true;menuPrevPause=paused;paused=true;
@@ -140,30 +153,60 @@ function endGame(win,reason){if(state!=='play')return;state='over';inGameMenu=fa
   else btns=`<button class="big" onclick="restartGame()">Play again</button><button class="big" onclick="mainMenu()">Main menu</button>`;
   sfx(win?'complete':'alert');say(win?'Mission accomplished':'Mission failed');
   showMenu(`<h1>${win?'VICTORY':'DEFEAT'}</h1><p>${esc(reason||(win?'The enemy Command Center has been destroyed!':''))}</p>
-  <p class="sub">Time ${tm} · Units built ${stats.built} · Enemies destroyed ${stats.kills} · Losses ${stats.lost}</p><div>${btns}</div>`)}
+  <p class="sub">Time ${tm} · Units built ${stats.built} · Enemies destroyed ${stats.kills} · Losses ${stats.lost}</p><div id="statsBox"></div><div>${btns}</div>`);
+  if(stats.hist){recordStats();renderStats($('statsBox'))}}
+
+// ---------- END-OF-GAME STATISTICS ----------
+const STAT_COL=['#5fbf4a','#e8584f','#6a95f5','#e0a03a'],STAT_DASH=[[],[7,4],[2,3],[9,3,2,3]];
+function renderStats(box){
+  const n=stats.team.length,h=stats.hist;if(!box||h.length<2)return;
+  const rows=stats.team.map((s,t)=>`<tr><td><span class="key" style="border-color:${STAT_COL[t]};border-top-style:${t?'dashed':'solid'}"></span>${TEAM_NAMES[t]}${t===0?' (you)':game.ally&&game.ally[t]===0?' (ally)':''}</td><td>${s.built}</td><td>${s.kills}</td><td>${s.lost}</td><td>${Math.round(s.earned)}</td></tr>`).join('');
+  box.innerHTML=`<table class="stab"><thead><tr><th>Player</th><th>Units built</th><th>Destroyed</th><th>Lost</th><th>Power earned</th></tr></thead><tbody>${rows}</tbody></table>
+  <div class="charts"><figure><figcaption>Army size</figcaption><canvas class="chart" data-k="u"></canvas></figure><figure><figcaption>Power earned</figcaption><canvas class="chart" data-k="p"></canvas></figure></div><div class="ctip" hidden></div>`;
+  const tip=box.querySelector('.ctip');
+  for(const cv of box.querySelectorAll('canvas.chart')){const k=cv.dataset.k,W=Math.min(260,Math.floor((box.clientWidth||520)/2-12)),H=150,dpr=Math.min(2,devicePixelRatio||1);
+    cv.width=W*dpr;cv.height=H*dpr;cv.style.width=W+'px';cv.style.height=H+'px';
+    const L=34,Rp=46,Tp=8,B=20,maxT=h[h.length-1].t||1,maxV=Math.max(1,...h.map(s=>Math.max(...s[k])));
+    const X=t=>L+(W-L-Rp)*t/maxT,Y=v=>Tp+(H-Tp-B)*(1-v/maxV);
+    const draw=hover=>{const g=cv.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,W,H);
+      g.strokeStyle='rgba(200,200,255,.12)';g.lineWidth=1;g.fillStyle='#aab';g.font='10px Verdana';g.textAlign='right';
+      for(let i=0;i<=2;i++){const v=maxV*i/2,y=Math.round(Y(v))+.5;g.beginPath();g.moveTo(L,y);g.lineTo(W-Rp,y);g.stroke();g.fillText(Math.round(v),L-4,y+3)}
+      g.textAlign='center';g.fillText('0:00',L,H-6);g.fillText(fmtTime(maxT),W-Rp,H-6);
+      for(let t=0;t<n;t++){g.strokeStyle=STAT_COL[t];g.lineWidth=2;g.setLineDash(STAT_DASH[t]);g.beginPath();h.forEach((s,i)=>{const x=X(s.t),y=Y(s[k][t]||0);i?g.lineTo(x,y):g.moveTo(x,y)});g.stroke();g.setLineDash([])}
+      const ends=[...Array(n).keys()].map(t=>({t,y:Y(h[h.length-1][k][t]||0)})).sort((a,b)=>a.y-b.y);for(let i=1;i<ends.length;i++)if(ends[i].y-ends[i-1].y<11)ends[i].y=ends[i-1].y+11;
+      g.textAlign='left';g.font='10px Verdana';for(const e of ends){g.fillStyle='#dfe6ff';g.fillText(TEAM_NAMES[e.t],W-Rp+4,e.y+3)}
+      if(hover!=null){const s=h[hover],x=Math.round(X(s.t))+.5;g.strokeStyle='rgba(255,255,255,.5)';g.beginPath();g.moveTo(x,Tp);g.lineTo(x,H-B);g.stroke();
+        for(let t=0;t<n;t++){g.fillStyle=STAT_COL[t];g.beginPath();g.arc(x,Y(s[k][t]||0),4,0,7);g.fill();g.strokeStyle='#1b1850';g.lineWidth=2;g.stroke()}}};
+    draw(null);
+    cv.onpointermove=ev=>{const r=cv.getBoundingClientRect(),mx=ev.clientX-r.left;let bi=0,bd=1e9;h.forEach((s,i)=>{const d=Math.abs(X(s.t)-mx);if(d<bd){bd=d;bi=i}});draw(bi);
+      const s=h[bi];tip.hidden=false;tip.textContent='';const hd=document.createElement('div');hd.className='th';hd.textContent=fmtTime(s.t);tip.appendChild(hd);
+      for(let t=0;t<n;t++){const rw=document.createElement('div');const sw=document.createElement('span');sw.className='key';sw.style.borderColor=STAT_COL[t];sw.style.borderTopStyle=t?'dashed':'solid';const b=document.createElement('b');b.textContent=s[k][t]||0;rw.append(sw,b,document.createTextNode(' '+TEAM_NAMES[t]));tip.appendChild(rw)}
+      const br=box.getBoundingClientRect();tip.style.left=(ev.clientX-br.left+12)+'px';tip.style.top=(ev.clientY-br.top-10)+'px'};
+    cv.onpointerleave=()=>{draw(null);tip.hidden=true}}
+}
 
 // ---------- SAVE / LOAD ----------
 function saveGame(slot){
-  const data={v:3,size:MW,seed:mapSeed,theme:themeId,game,diff,time,power,tech,stats,ais,nextId,templates,groups,cam:{x:cam.x,y:cam.y,dist:cam.dist,yaw:cam.yaw,pitch:cam.pitch},
+  const data={v:4,weather,size:MW,seed:mapSeed,theme:themeId,game,diff,time,power,tech,stats,ais,nextId,templates,groups,cam:{x:cam.x,y:cam.y,dist:cam.dist,yaw:cam.yaw,pitch:cam.pitch},
     explored:Array.from(explored).join(''),ents:ents.filter(e=>e.hp>0).map(e=>{const o={};for(const k in e)if(k!=='auto'&&k!=='st'&&k!=='sw')o[k]=e[k];return o})};
   const label=game.mode==='campaign'?'Mission '+(game.mission+1)+': '+MISSIONS[game.mission].name:'Skirmish: '+THEMES[themeId].name+', '+(game.teams-1)+' AI ('+diff+')';
   const ok=lsSet('if_save_'+slot,JSON.stringify(data))&&lsSet('if_meta_'+slot,JSON.stringify({label,time:fmtTime(time),date:new Date().toLocaleString()}));
   if(ok){msg('Game saved to slot '+slot,2);sfx('complete');resumeGame()}else{const m=$('slotMsg');if(m)m.textContent='Saving failed. Your browser does not allow saving here.'}}
 function loadGame(slot){let s=null;try{s=JSON.parse(lsGet('if_save_'+slot)||'null')}catch(e){}
   if(!s){const m=$('slotMsg');if(m)m.textContent='This save could not be loaded.';return}
-  audioInit();setMapSize(s.size||64);const clears=s.game.mode==='campaign'?(MISSIONS[s.game.mission].clears||[]):[];
-  startWorld(s.seed,s.theme,clears);
+  audioInit();setMapSize(s.size||64);weather=s.weather||'clear';const clears=s.game.mode==='campaign'?(MISSIONS[s.game.mission].clears||[]):[];
+  startWorld(s.seed,s.theme,clears,s.game.custom);
   game=s.game;diff=s.diff;time=s.time;power=s.power;tech=s.tech;stats=s.stats;ais=s.ais||[null,s.ai];templates=s.templates;groups=s.groups||{};
   for(const e of s.ents){e.auto=null;if(e.kind==='u')e.st=calcStats(e.d);else{e.sw=structWeapon(e.type);for(let y=e.ty;y<e.ty+e.h;y++)for(let x=e.tx;x<e.tx+e.w;x++)bldMap[idx(x,y)]=e.id;if(e.type==='derrick'){const o=oils[oilMap[idx(e.tx,e.ty)]-1];if(o)o.bid=e.id}}ents.push(e);byId.set(e.id,e)}
   nextId=s.nextId;for(let i=0;i<MW*MH;i++){explored[i]=+s.explored[i]||0;fogCur[i]=explored[i]?150:238}
   beginPlay();Object.assign(cam,s.cam);msg('Game loaded',2)}
 
 // ---------- GAME FLOW ----------
-function startWorld(seed,tid,clears){
+function startWorld(seed,tid,clears,custom){
   gameId++;
   if(world)scene.remove(world);meshes.clear();world=new THREE.Group();scene.add(world);
   ents=[];byId=new Map();nextId=1;sel=[];placing=null;projs=[];fx=[];decals=[];markers=[];time=0;paused=false;groups={};lastAlert=-99;stats={kills:0,lost:0,built:0};
-  genMap(seed,tid,clears);applyTheme();bldMap=new Int32Array(MW*MH);
+  genMap(seed,tid,clears,custom);applyTheme();applyWeather();bldMap=new Int32Array(MW*MH);
   const tm=buildTerrainMesh();world.add(tm);
   explored=new Uint8Array(MW*MH);visible=new Uint8Array(MW*MH);fogCur=new Float32Array(MW*MH).fill(238);fogT=0;fogCv=null;
   fogTex=new THREE.DataTexture(new Uint8Array(MW*MH*4),MW,MH);fogTex.magFilter=fogTex.minFilter=THREE.LinearFilter;fogTex.needsUpdate=true;
@@ -174,23 +217,27 @@ function startWorld(seed,tid,clears){
 function beginPlay(){updateFog();state='play';inGameMenu=false;hideMenu();$('designer').hidden=true;panelKey='';missionT=0;
   const hq=findHQ(0)||ents.find(e=>e.team===0);if(hq){cam.x=hq.x+80;cam.y=hq.y-60}cam.yaw=.7;cam.dist=760;cam.pitch=.92;
   $('obj').hidden=game.mode!=='campaign';$('obj').innerHTML=''}
-function newSkirmish(o){sk={...o};audioInit();setMapSize(o.size);const N=o.ais+1;
-  game={mode:'skirmish',mission:-1,ms:{},teams:N,ally:(o.mode==='ffa'?[0,1,2,3]:[0,1,1,1]).slice(0,N),sk:{...o}};diff=o.diff;
-  startWorld(Math.floor(R()*1e9),o.map,[]);
-  power=Array(N).fill(1000);tech=Array.from({length:N},()=>({}));templates=Array.from({length:N},()=>[]);addDefaultTemplates(0);
-  const D=DIFF[o.diff],first=Math.round(D.first*(.8+.2*o.size/64));
+function newSkirmish(o){sk=JSON.parse(JSON.stringify(o));audioInit();
+  const custom=o.map.startsWith('custom:')?loadCustomMap(o.map.slice(7)):null;setMapSize(custom?custom.size:o.size);const N=o.ais+1;
+  const ally=[0];for(let t=1;t<N;t++)ally.push(o.allies[t-1]?0:o.mode==='ffa'?t:1);
+  game={mode:'skirmish',mission:-1,ms:{},teams:N,ally,sk:JSON.parse(JSON.stringify(o)),custom};diff=o.diff;weather=o.weather||'clear';
+  startWorld(Math.floor(R()*1e9),custom?custom.theme:o.map,[],custom);
+  power=Array(N).fill(1000);tech=Array.from({length:N},()=>({}));templates=Array.from({length:N},()=>[]);addDefaultTemplates(0);initStats(N);
+  const D=DIFF[o.diff],first=Math.round(D.first*(.8+.2*MW/64));
   ais=[null];for(let t=1;t<N;t++)ais.push(newAI({inc:D.inc,first:first+(t-1)*45,gap:D.gap}));
-  for(let t=0;t<N;t++)stdBase(t,{extra:t&&o.diff!=='easy'?[['tower',1]]:[]});
+  // allies take the corners next to the player, enemies the far ones
+  const free=[1,2,3],corner=[0];for(let t=1;t<N;t++){const pref=ally[t]===0?[2,3,1]:[1,3,2],c=pref.find(x=>free.includes(x));free.splice(free.indexOf(c),1);corner.push(c)}
+  for(let t=0;t<N;t++)stdBase(t,{corner:corner[t],start:custom?custom.starts[t]:null,extra:t&&o.diff!=='easy'?[['tower',1]]:[]});
   beginPlay();msg('Build oil derricks to get power. The first enemy attack comes in about '+Math.round(first/60)+' minutes!',8)}
-function startMission(i){const M=MISSIONS[i];audioInit();setMapSize(64);game={mode:'campaign',mission:i,ms:{t:0},teams:2,ally:[0,1]};diff='normal';startWorld(M.seed,M.theme,M.clears||[]);
+function startMission(i){const M=MISSIONS[i];audioInit();setMapSize(64);game={mode:'campaign',mission:i,ms:{t:0},teams:2,ally:[0,1]};diff='normal';weather=M.weather||'clear';startWorld(M.seed,M.theme,M.clears||[]);
   power=[M.power||1000,1200];tech=[Object.fromEntries(M.tech.map(k=>[k,true])),Object.fromEntries(M.enemyTech.map(k=>[k,true]))];templates=[[],[]];addDefaultTemplates(0);
-  ais=[null,newAI(M.ai)];M.setup();beginPlay();msg('Mission '+(i+1)+': '+M.name,4)}
+  ais=[null,newAI(M.ai)];initStats(2);M.setup();beginPlay();msg('Mission '+(i+1)+': '+M.name,4)}
 
 // ---------- INPUT ----------
 function pickAt(sx,sy){let best=null,bd=1e9;
   for(const e of ents){if(e.kind!=='u'||e.hp<=0||!shown(e))continue;const h=entH(e),p=worldToScreen(e.x,h,e.y),r=Math.max(10,(e.r+4)*pxPerUnit(e.x,h,e.y)),d=Math.hypot(p.x-sx,p.y-sy);if(d<r&&d<bd){bd=d;best=e}}
   if(best)return best;const w=screenToWorld(sx,sy);if(!w)return null;const tx=tileOf(w.x),ty=tileOf(w.y);const id=inb(tx,ty)?bldMap[idx(tx,ty)]:0;const b=id?byId.get(id):null;return b&&shown(b)?b:null}
-const selectable=u=>u.kind==='u'&&u.team===0&&u.hp>0&&!u.stranded;
+const selectable=u=>u.kind==='u'&&u.team===0&&u.hp>0&&!u.stranded&&!u.inside;
 ui.addEventListener('contextmenu',e=>e.preventDefault());
 ui.addEventListener('mousedown',e=>{if(state!=='play'||uiOpen())return;audioInit();
   if(e.button===1){e.preventDefault();rot={x:e.clientX,y:e.clientY};return}
@@ -226,12 +273,16 @@ function rightClick(wx,wy,t){
   if(own.length===1&&own[0].kind==='b'){if(own[0].type==='factory'){own[0].rally={x:wx,y:wy};markers.push({x:wx,y:wy,life:.5,c:'#8f8'});sfx('ack')}return}
   const us=own.filter(e=>e.kind==='u');if(!us.length)return;
   if(t&&hostile(0,t.team)){for(const u of us){if(canHit(u,t)){u.order={t:'attack',id:t.id};u.repath=0;u.chasing=false;setPath(u,t.x,t.y)}else orderMove(u,wx,wy)}markers.push({x:t.x,y:t.y,life:.5,c:'#f66'});sfx('ack');return}
+  if(t&&t.team===0&&t.kind==='u'&&t.st.util==='transport'&&us.some(u=>!isAir(u))){for(const u of us)if(!isAir(u)){u.order={t:'board',id:t.id};u.path=[];u.repath=0}markers.push({x:t.x,y:t.y,life:.5,c:'#6cf'});sfx('ack');return}
   if(t&&t.team===0&&t.kind==='b'&&(t.built<1||t.hp<t.maxHp)&&us.some(isTruck)){for(const u of us)if(isTruck(u))orderBuild(u,t);sfx('ack');return}
   if(t&&t.team===0&&t.kind==='u'&&t.hp<t.maxHp&&us.some(u=>u.st.util==='repair')){for(const u of us)if(u.st.util==='repair'){u.order=null;u.heal=t.id;u.path=[]}markers.push({x:t.x,y:t.y,life:.5,c:'#6f9'});sfx('ack');return}
   const n=us.length,cols=Math.ceil(Math.sqrt(n)),sp=34;
   us.sort((a,b)=>dist(a,{x:wx,y:wy})-dist(b,{x:wx,y:wy})).forEach((u,i)=>{const cx=i%cols-(cols-1)/2,cy=Math.floor(i/cols)-(Math.ceil(n/cols)-1)/2;orderMove(u,wx+cx*sp,wy+cy*sp)});
   markers.push({x:wx,y:wy,life:.5,c:'#8f8'});sfx('ack');
 }
+function unload(tr){const c=cargoOf(tr);const tx=tileOf(tr.x),ty=tileOf(tr.y);c.forEach((u,i)=>{const a=i*2.4,r=i?1+Math.floor(i/3):0,f=nearestFree(tx+Math.round(Math.cos(a)*r),ty+Math.round(Math.sin(a)*r),tx,ty);
+  if(f){u.x=(f[0]+.5)*TILE;u.y=(f[1]+.5)*TILE}else{u.x=tr.x;u.y=tr.y}u.inside=0;u.order=null;u.path=[];u.home={x:u.x,y:u.y}});return c.length}
+function unloadSel(){let n=0;for(const e of sel)if(e.team===0&&e.kind==='u'&&e.st.util==='transport')n+=unload(e);if(n){msg(n+' units unloaded',1.5);sfx('ack')}else deny('The transport is empty')}
 function miniPos(e){const r=mini.getBoundingClientRect();return{x:(e.clientX-r.left)/r.width*WW,y:(e.clientY-r.top)/r.height*WH}}
 let miniDrag=false;
 mini.addEventListener('contextmenu',e=>e.preventDefault());
@@ -250,6 +301,7 @@ addEventListener('keydown',e=>{const k=e.key.toLowerCase();keys[k]=true;
     return}
   if(k==='p')paused=!paused;
   if(k==='m')toggleSound();
+  if(k==='u')unloadSel();
   if(k==='h'){const hq=findHQ(0);if(hq){cam.x=hq.x;cam.y=hq.y}}
   if(k==='g')sel=ents.filter(u=>selectable(u)&&!u.st.util);
   if(k.startsWith('arrow')||k===' ')e.preventDefault()});
@@ -269,6 +321,6 @@ function loop(now){const dt=Math.min(.05,(now-last)/1000);last=now;const rt=now/
   if(state!=='menu'){
     if(state==='play'){if(!uiOpen())scrollCam(dt);if(!paused)update(dt);updateHud();if(msgT>0){msgT-=dt;if(msgT<=0)$('msg').textContent=''}}
     for(const m of markers)m.life-=dt;markers=markers.filter(m=>m.life>0);
-    updateCamera();syncScene(rt);renderer.render(scene,camera);mouse.world=screenToWorld(mouse.x,mouse.y);drawOverlay(rt);drawMinimap()}
+    updateCamera();updateWeather(dt,rt);syncScene(rt);renderer.render(scene,camera);mouse.world=screenToWorld(mouse.x,mouse.y);drawOverlay(rt);drawMinimap()}
   requestAnimationFrame(loop)}
 requestAnimationFrame(loop);

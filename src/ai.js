@@ -14,14 +14,17 @@ const AI_T={
   rep:{body:'viper',prop:'half',weapon:'repair'},
   aa:{body:'cobra',prop:'half',weapon:'aa'},
   vbomb:{body:'cobra',prop:'vtol',weapon:'bomb'},
-  vlan:{body:'viper',prop:'vtol',weapon:'lancer'}
+  vlan:{body:'viper',prop:'vtol',weapon:'lancer'},
+  flc:{body:'cobra',prop:'half',weapon:'flamer'},
+  lasm:{body:'mantis',prop:'tracks',weapon:'laser'},
+  canm:{body:'mantis',prop:'tracks',weapon:'cannon'}
 };
-const AI_RESEARCH=['mg','tracks','lancer','hardpoint','python','cannon','mortar','armor','aa','repairfac','rocket','oil','engine','hover','vtol'];
+const AI_RESEARCH=['mg','tracks','lancer','flamer','hardpoint','python','cannon','mortar','armor','aa','repairfac','rocket','mantis','oil','engine','laser','optics','hover','vtol'];
 function newAI(o){o=o||{};return{t:2+R()*2,time:0,wave:0,size:o.size||6,maxSize:o.maxSize||22,next:o.first||220,gap:o.gap||140,inc:o.inc||1,mode:o.mode||'base',
   base:o.base||3,grow:o.grow||1.3,pool:o.pool||null,waveT:o.first||40,research:o.research||AI_RESEARCH}}
 const foesOf=T=>ents.filter(e=>e.hp>0&&!e.stranded&&hostile(T,e.team));
 function aiPickUnit(ai,T,ctx){
-  const W={mgv:ai.wave<2?3:.6,mgc:2,can:2,canp:3,lan:2,lanp:3,mor:1.1,hov:1,rep:ctx.army>5?.8:0,aa:ctx.foeAir?2.5:0,vbomb:ctx.pads?1.6:0,vlan:ctx.pads?1:0};
+  const W={mgv:ai.wave<2?3:.6,mgc:2,can:2,canp:3,lan:2,lanp:3,mor:1.1,hov:1,rep:ctx.army>5?.8:0,aa:ctx.foeAir?2.5:0,vbomb:ctx.pads?1.6:0,vlan:ctx.pads?1:0,flc:1.2,lasm:3,canm:2.5};
   let tot=0;const c=[];for(const k in W)if(W[k]>0&&designOk(T,AI_T[k])){c.push([k,W[k]]);tot+=W[k]}
   let x=R()*tot;for(const[k,w]of c){x-=w;if(x<=0)return AI_T[k]}return AI_T.mgv}
 function findSpot(type,cx,cy){
@@ -45,6 +48,7 @@ function aiThink(T){
     let b=null;
     if(free.length&&pw()>=50&&dist(free[0],hq)<reach)b=placeBuilding('derrick',T,free[0].tx,free[0].ty);
     else if(ai.time>80&&cnt('research')===0)b=tryBuild('research',hx,hy);
+    else if(ai.time>150&&cnt('sensorTower')===0&&pw()>=200)b=tryBuild('sensorTower',toward[0],toward[1]);
     else if(ai.time>200&&facs.length<(pw()>800?3:2)&&pw()>=320)b=tryBuild('factory',hx,hy);
     else if(foeAir&&cnt('aaSite')<3)b=tryBuild('aaSite',hx,hy);
     else if(has(T,'vtol')&&cnt('vtolPad')<2&&pw()>=250)b=tryBuild('vtolPad',hx-Math.sign(MW/2-hx)*3,hy);
@@ -59,7 +63,9 @@ function aiThink(T){
   for(const r of mine.filter(e=>e.type==='research'&&e.built>=1&&!e.res)){
     const n=RESEARCH.find(x=>ai.research.includes(x.id)&&!has(T,x.id)&&(!x.req||has(T,x.req))&&!mine.some(m=>m.res&&m.res.id===x.id));
     if(n&&pw()>=n.cost+150){power[T]-=n.cost;r.res={id:n.id,prog:0}}}
-  const threat=foes.find(e=>e.kind==='u'&&dist(e,hq)<600);
+  // defend our own base and the bases of our allies
+  const homes=ents.filter(e=>e.type==='hq'&&e.hp>0&&!hostile(T,e.team));
+  const threat=foes.find(e=>e.kind==='u'&&dist(e,hq)<600)||foes.find(e=>e.kind==='u'&&homes.some(h=>dist(e,h)<500));
   if(threat){for(const a of army)if(!a.order||(a.order.t!=='attack'&&!a.raid))orderMove(a,threat.x,threat.y,'amove');
     for(const a of air)if(!a.order&&canHit(a,threat))a.order={t:'attack',id:threat.id};ai.time+=1;return}
   const home=army.filter(a=>!a.raid);

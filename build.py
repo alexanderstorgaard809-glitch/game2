@@ -8,7 +8,7 @@ Usage:
 import os, sys
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
-PARTS = ['core.js', 'ai.js', 'campaign.js', 'sound.js', 'render.js', 'ui.js']
+PARTS = ['core.js', 'ai.js', 'campaign.js', 'sound.js', 'render.js', 'ui.js', 'editor.js']
 CDN = '<script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>'
 
 

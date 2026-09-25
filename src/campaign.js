@@ -8,15 +8,15 @@ function spawnUnits(team,list,x,y,extra){const out=[];
 const CORNERS=[[0,0],[1,1],[0,1],[1,0]]; // [flipX, flipY] for bottom-left, top-right, top-left, bottom-right
 function cornerTile(c,x,y,w){const[fx,fy]=CORNERS[c];return[fx?MW-x-w:x,fy?MH-y-w:y]}
 function stdBase(team,o={}){
-  const c=o.corner??team,m=(x,y,w)=>cornerTile(c,x,y,w);
-  makeBuilding('hq',team,...m(8,MH-12,3),true);
-  if(o.factory!==false)makeBuilding('factory',team,...m(13,MH-13,3),true);
-  const bt=m(11,MH-11,0),bx=bt[0]*TILE,by=bt[1]*TILE;
-  const near=oils.filter(p=>Math.hypot(p.x-bx,p.y-by)<460).sort((a,b)=>Math.hypot(a.x-bx,a.y-by)-Math.hypot(b.x-bx,b.y-by));
+  let bt;const c=o.corner??team;
+  if(o.start){bt=o.start;for(const type of o.factory===false?['hq']:['hq','factory']){const s=findSpot(type,bt[0]-1,bt[1]-1);if(s)makeBuilding(type,team,s[0],s[1],true)}}
+  else{const m=(x,y,w)=>cornerTile(c,x,y,w);makeBuilding('hq',team,...m(8,MH-12,3),true);if(o.factory!==false)makeBuilding('factory',team,...m(13,MH-13,3),true);bt=m(11,MH-11,0)}
+  const bx=bt[0]*TILE,by=bt[1]*TILE;
+  const near=oils.filter(p=>!p.bid&&Math.hypot(p.x-bx,p.y-by)<460).sort((a,b)=>Math.hypot(a.x-bx,a.y-by)-Math.hypot(b.x-bx,b.y-by));
   for(let i=0;i<(o.derricks??1)&&i<near.length;i++)makeBuilding('derrick',team,near[i].tx,near[i].ty,true);
   const tw=[bt[0]+(bt[0]<MW/2?6:-6),bt[1]+(bt[1]<MH/2?6:-6)];
   for(const[type,n]of o.extra||[])for(let i=0;i<n;i++){const def=DEFENSES.includes(type)||type==='wall',s=findSpot(type,def?tw[0]:bt[0],def?tw[1]:bt[1]);if(s)makeBuilding(type,team,s[0],s[1],true)}
-  const sp=m(12,MH-15,0);spawnUnits(team,o.units||['truck','truck','mgv','mgv'],sp[0]*TILE,sp[1]*TILE);
+  const sp=o.start?[bt[0]+(bt[0]<MW/2?3:-3),bt[1]+(bt[1]<MH/2?3:-3)]:cornerTile(c,12,MH-15,0);spawnUnits(team,o.units||['truck','truck','mgv','mgv'],sp[0]*TILE,sp[1]*TILE);
 }
 const MISSIONS=[
   {name:'First Foothold',theme:'desert',seed:4101,
@@ -25,7 +25,7 @@ const MISSIONS=[
     ai:{inc:.55,first:420,gap:220,size:5,maxSize:10,research:['mg','armor']},
     setup(){stdBase(0,{units:['truck','truck','mgv','mgv']});stdBase(1,{extra:[['tower',1]],units:['truck','mgv','mgv']})},
     objectives:[{text:'Build 4 Oil Derricks',check:()=>countB(0,'derrick')>=4},{text:'Build a Research Facility',check:()=>countB(0,'research')>=1},{text:'Build 2 Guard Towers',check:()=>countB(0,'tower')>=2}]},
-  {name:'Hold the Line',theme:'snow',seed:5202,
+  {name:'Hold the Line',theme:'snow',seed:5202,weather:'snow',
     brief:'Scouts report a large enemy force moving through the frozen pass. We cannot stop them all, but reinforcements are on the way. Dig in, build defenses and hold the base for eight minutes.',
     tech:['mg','tracks'],research:['hardpoint','lancer','repairfac','cannon','armor','oil'],enemyTech:['tracks','python','lancer'],power:1600,
     ai:{mode:'waves',gap:55,first:90,base:3,grow:1.3,pool:[['mgv','mgc'],['mgc','can'],['can','mgc','lan'],['can','lan','canp'],['canp','lan','lanp']]},
@@ -42,7 +42,7 @@ const MISSIONS=[
       if(cv.some(c=>ents.some(e=>e.team===0&&e.kind==='u'&&!e.stranded&&dist(e,c)<220))){game.ms.rescued=true;for(const c of cv)c.stranded=false;msg('Convoy found! Escort the trucks back to base.',4);sfx('complete');say('Convoy located')}},
     objectives:[{text:'Find the convoy',check:()=>!!game.ms.rescued},{text:'Bring 2 convoy trucks to your Command Center',check:()=>{const hq=findHQ(0);return !!hq&&ents.filter(e=>e.convoy&&e.hp>0&&dist(e,hq)<360).length>=2}}],
     fail:()=>ents.filter(e=>e.convoy&&e.hp>0).length<2?'Too many convoy trucks were destroyed.':''},
-  {name:'Outpost Delta',theme:'city',seed:7404,
+  {name:'Outpost Delta',theme:'city',seed:7404,weather:'rain',
     brief:'The enemy has fortified an old city district and uses it to raid our supply lines. Break through their defenses and destroy the outpost. Their Command Center and every factory must fall.',
     tech:['mg','tracks','hardpoint','lancer','repairfac','cannon','python'],research:['mortar','rocket','hover','engine','armor','oil'],enemyTech:['tracks','hardpoint','lancer','python'],power:1400,
     ai:{inc:1,first:240,gap:150,size:7},
@@ -54,7 +54,7 @@ const MISSIONS=[
     ai:{inc:1.05,first:200,gap:140,size:7},
     setup(){stdBase(0,{derricks:2,extra:[['research',1],['aaSite',1]],units:['truck','truck','can','lan','aa','rep']});stdBase(1,{derricks:3,extra:[['research',1],['vtolPad',3],['aaSite',2],['hardpoint',1]],units:['truck','truck','vbomb','vbomb','can','lan']})},
     objectives:[{text:'Destroy all enemy VTOL Pads',check:()=>countB(1,'vtolPad',true)===0},{text:'Destroy the enemy Command Center',check:()=>!findHQ(1)}]},
-  {name:'Iron Fist',theme:'city',seed:9606,
+  {name:'Iron Fist',theme:'city',seed:9606,weather:'night',
     brief:"This is it, Commander. The enemy's main base lies ahead, heavily defended and fully equipped. Use everything you have learned. Destroy every factory and their Command Center, and the valley is ours.",
     tech:['mg','tracks','hardpoint','lancer','repairfac','cannon','python','mortar','aa','vtol'],research:ALL_TECH,enemyTech:ALL_TECH,power:1800,
     ai:{inc:1.35,first:170,gap:115,size:8},
