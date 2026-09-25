@@ -59,7 +59,8 @@ function aiThink(){
   if(threat){for(const a of army)if(!a.order||(a.order.t!=='attack'&&!a.raid))orderMove(a,threat.x,threat.y,'amove');
     for(const a of air)if(!a.order&&canHit(a,threat))a.order={t:'attack',id:threat.id};ai.time+=1;return}
   const home=army.filter(a=>!a.raid);
-  if(home.length>=ai.size||(ai.time>ai.next&&home.length>=3)){
+  // never attack before the grace period ends; later, attack on schedule or when the army is very large
+  if((ai.time>ai.next&&home.length>=3)||(ai.wave>0&&home.length>=ai.size*1.5)){
     const pb=ents.filter(e=>e.team===0&&e.kind==='b'&&e.hp>0);
     if(pb.length){const tgt=R()<.5?findHQ(0)||pb[0]:pb.sort((a,b)=>dist(a,hq)-dist(b,hq))[0];
       for(const a of home){a.raid=true;orderMove(a,tgt.x+(R()-.5)*60,tgt.y+(R()-.5)*60,'amove')}

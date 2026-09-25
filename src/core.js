@@ -68,7 +68,7 @@ const RESEARCH=[
   {id:'engine',name:'Improved Engines',desc:'+20% unit speed',cost:150,time:20}
 ];
 const RANKS=[0,1,3,6,10],RANK_NAMES=['Rookie','Green','Trained','Veteran','Elite'];
-const DIFF={easy:{inc:.7,first:300,gap:170},normal:{inc:1,first:220,gap:140},hard:{inc:1.45,first:160,gap:110}};
+const DIFF={easy:{inc:.7,first:420,gap:200},normal:{inc:1,first:300,gap:160},hard:{inc:1.45,first:210,gap:120}};
 const THEMES={
   desert:{name:'Desert Canyon',ground:'#9a7650',blot:['125,72,45','175,140,92'],speck:['rgba(60,40,25,.35)','rgba(215,185,135,.25)'],rockBase:'#5a4535',rock:['#6b5240','#4a392c','#7a604a','#3a2c22','#5e4a3a'],road:'#353432',bg:0x0b0812,hemi:[0xfff0dd,0x4a2c1a],sun:0xffe8cc,gen:'canyon',cliff:78,rocks:24},
   snow:{name:'Frozen Pass',ground:'#d6dbe2',blot:['150,160,178','245,248,252'],speck:['rgba(110,120,140,.3)','rgba(255,255,255,.5)'],rockBase:'#59606b',rock:['#6e7682','#4b515b','#8a929e','#3a3f47','#626a75'],road:'#4a4d52',bg:0x0d1118,hemi:[0xe8f0ff,0x4a5260],sun:0xf0f4ff,gen:'canyon',cliff:92,rocks:30},

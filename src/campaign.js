@@ -26,7 +26,7 @@ const MISSIONS=[
   {name:'Hold the Line',theme:'snow',seed:5202,
     brief:'Scouts report a large enemy force moving through the frozen pass. We cannot stop them all, but reinforcements are on the way. Dig in, build defenses and hold the base for eight minutes.',
     tech:['mg','tracks'],research:['hardpoint','lancer','repairfac','cannon','armor','oil'],enemyTech:['tracks','python','lancer'],power:1600,
-    ai:{mode:'waves',gap:55,first:45,base:3,grow:1.3,pool:[['mgv','mgc'],['mgc','can'],['can','mgc','lan'],['can','lan','canp'],['canp','lan','lanp']]},
+    ai:{mode:'waves',gap:55,first:90,base:3,grow:1.3,pool:[['mgv','mgc'],['mgc','can'],['can','mgc','lan'],['can','lan','canp'],['canp','lan','lanp']]},
     setup(){stdBase(0,{derricks:3,extra:[['research',1],['tower',2]],units:['truck','truck','mgc','mgc','can','can']})},
     objectives:[{text:'Survive until reinforcements arrive',timer:480}]},
   {name:'Lost Convoy',theme:'desert',seed:6303,clears:[[30,20,4]],

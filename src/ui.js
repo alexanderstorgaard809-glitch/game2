@@ -174,7 +174,7 @@ function beginPlay(){updateFog();state='play';inGameMenu=false;hideMenu();$('des
 function newSkirmish(tid,d){audioInit();game={mode:'skirmish',mission:-1,ms:{}};diff=d;startWorld(Math.floor(R()*1e9),tid,[]);
   power=[1000,1000];tech=[{},{}];templates=[[],[]];addDefaultTemplates(0);ai=newAI({inc:DIFF[d].inc,first:DIFF[d].first,gap:DIFF[d].gap});
   stdBase(0,{});stdBase(1,{extra:d==='easy'?[]:[['tower',1]]});beginPlay();
-  msg('Build oil derricks with your trucks to get power. Destroy the enemy Command Center!',7)}
+  msg('Build oil derricks to get power. The enemy will attack in about '+Math.round(DIFF[d].first/60)+' minutes!',8)}
 function startMission(i){const M=MISSIONS[i];audioInit();game={mode:'campaign',mission:i,ms:{t:0}};diff='normal';startWorld(M.seed,M.theme,M.clears||[]);
   power=[M.power||1000,1200];tech=[Object.fromEntries(M.tech.map(k=>[k,true])),Object.fromEntries(M.enemyTech.map(k=>[k,true]))];templates=[[],[]];addDefaultTemplates(0);
   ai=newAI(M.ai);M.setup();beginPlay();msg('Mission '+(i+1)+': '+M.name,4)}
