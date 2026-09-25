@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Iron Frontier</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#07060f;font-family:Verdana,Geneva,sans-serif;color:#dfe6ff;user-select:none;-webkit-user-select:none;color-scheme:dark}
+[hidden]{display:none!important}
+#view,#ui{position:absolute;left:0;top:0;display:block}
+#ui{z-index:2}
+#hud{position:absolute;left:0;right:0;bottom:0;height:170px;display:flex;gap:8px;padding:8px;box-sizing:border-box;background:linear-gradient(#1f1a55,#0c0a26);border-top:2px solid #6a5fd0;z-index:3}
+.panel{background:linear-gradient(135deg,#2c2878,#1b1850);border:2px solid #6a5fd0;border-radius:8px;padding:8px;box-sizing:border-box;box-shadow:inset 0 0 12px rgba(0,0,0,.5)}
+#left{width:200px;flex:none;display:flex;flex-direction:column;gap:5px;font-size:12px}
+.row{display:flex;justify-content:space-between;align-items:baseline}
+#income{color:#bfe;font-variant-numeric:tabular-nums}
+#power{font-size:24px;font-weight:bold;color:#ffe066;font-variant-numeric:tabular-nums}
+#pbar{height:9px;background:#0a0920;border-radius:5px;overflow:hidden;border:1px solid #6a5fd0}
+#pbar div{height:100%;width:0;background:linear-gradient(90deg,#c9a400,#ffe066)}
+#counts{font-variant-numeric:tabular-nums}
+.row3{display:flex;gap:4px;margin-top:auto}
+.sb{flex:1;background:#3a34a0;border:1px solid #7d72e8;color:#fff;border-radius:6px;padding:5px 2px;font:inherit;font-size:11px;cursor:pointer}
+.sb:hover,.sb:focus-visible{border-color:#ffe066;outline:none}
+#center{flex:1;overflow:hidden;min-width:0;display:flex;flex-direction:column}
+#selTitle{font-weight:bold;margin-bottom:6px;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#buttons{display:flex;flex-wrap:wrap;gap:6px;overflow-y:auto;min-height:0;flex:1;align-content:flex-start}
+.note{font-size:12px;color:#bbc;padding:6px}
+.btn{width:90px;height:92px;background:radial-gradient(circle at 50% 35%,#4a44b0,#221e66);border:2px solid #7d72e8;border-radius:10px;color:#fff;font-size:10px;line-height:1.2;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;position:relative;overflow:hidden;box-sizing:border-box;padding:2px}
+.btn:hover{border-color:#ffe066}
+.btn img{width:72px;height:48px;pointer-events:none}
+.btn.dis{opacity:.45}
+.btn .cost{color:#ffe066}
+.btn .q{position:absolute;top:3px;right:6px;color:#8f8;font-weight:bold;font-size:14px}
+.btn .prog{position:absolute;left:0;bottom:0;height:5px;width:0;background:#8f8}
+#mini{width:154px;height:154px;background:#000;border:2px solid #6a5fd0;border-radius:6px;cursor:crosshair;flex:none}
+#msg{position:absolute;top:14px;left:50%;transform:translateX(-50%);font-size:17px;font-weight:bold;text-shadow:0 0 5px #000,0 0 2px #000;pointer-events:none;text-align:center;color:#ffe9a0;z-index:4;width:60%}
+#obj{position:absolute;top:10px;left:10px;z-index:4;background:rgba(20,16,60,.85);border:1px solid #6a5fd0;border-radius:8px;padding:8px 12px;font-size:12px;max-width:320px;line-height:1.7;pointer-events:none}
+#obj b{color:#ffe066}
+#help{position:absolute;top:8px;right:10px;font-size:11px;color:#ccd;text-shadow:0 0 3px #000;pointer-events:none;text-align:right;line-height:1.5;z-index:4}
+#overlay{position:absolute;inset:0;background:rgba(5,4,20,.86);display:flex;align-items:center;justify-content:center;z-index:10}
+.box{background:linear-gradient(135deg,#2c2878,#15123f);border:2px solid #6a5fd0;border-radius:12px;padding:22px 30px;max-width:600px;max-height:90vh;overflow:auto;text-align:center;margin:16px;box-sizing:border-box}
+.box h1{margin:0 0 6px;color:#ffe066;letter-spacing:4px;text-wrap:balance}
+.box h2{margin:0 0 4px}
+.box ul{font-size:13px;line-height:1.6;text-align:left;padding-left:18px}
+.sub{color:#aab;font-size:13px}
+.story{font-size:14px;line-height:1.6;text-align:left;max-width:62ch}
+.big{padding:10px 22px;margin:6px;font-size:15px;background:#3a34a0;border:2px solid #7d72e8;color:#fff;border-radius:8px;cursor:pointer;font-family:inherit}
+.big:hover,.big:focus-visible{border-color:#ffe066;outline:none}
+.big:disabled{opacity:.4;cursor:not-allowed}
+.menu-list{display:flex;flex-direction:column;gap:8px;align-items:stretch;min-width:min(340px,80vw)}
+.menu-list .big{margin:0}
+.mission{text-align:left;background:#2e2a80;border:2px solid #6a5fd0;border-radius:8px;color:#fff;padding:9px 14px;font:inherit;cursor:pointer}
+.mission small{display:block;color:#bbc;margin-top:3px}
+.mission:hover:not(:disabled),.mission:focus-visible{border-color:#ffe066;outline:none}
+.mission:disabled{opacity:.45;cursor:not-allowed}
+#designer{position:absolute;inset:0;z-index:8;background:rgba(5,4,20,.7);display:flex;align-items:center;justify-content:center}
+.dbox{background:linear-gradient(135deg,#2c2878,#15123f);border:2px solid #6a5fd0;border-radius:12px;width:min(900px,94vw);max-height:92vh;overflow:auto;padding:16px 20px;box-sizing:border-box}
+.dbox h2{margin:0 0 8px;color:#ffe066;letter-spacing:2px}
+.dgrid{display:flex;gap:18px;flex-wrap:wrap}
+.dparts{flex:1 1 380px;display:flex;flex-direction:column;gap:4px}
+.dprev{flex:0 1 340px;display:flex;flex-direction:column;gap:6px}
+.dlabel{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#aab;margin-top:8px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips.center{justify-content:center}
+.chip{background:#2e2a80;border:2px solid #6a5fd0;border-radius:8px;color:#fff;padding:6px 10px;font:inherit;font-size:12px;cursor:pointer;text-align:left}
+.chip small{display:block;color:#ffe066;font-size:11px}
+.chip.on{border-color:#ffe066;background:#4a44b0}
+.chip:hover:not(:disabled),.chip:focus-visible{border-color:#ffe066;outline:none}
+.chip:disabled{opacity:.4;cursor:not-allowed}
+#dImg{width:100%;max-width:340px;aspect-ratio:3/2;background:radial-gradient(#3b3590,#15123f);border-radius:8px}
+#dName{font-weight:bold;color:#ffe066}
+#dStats{width:100%;font-size:12px;border-collapse:collapse;font-variant-numeric:tabular-nums}
+#dStats td{padding:3px 4px;border-bottom:1px solid rgba(122,112,232,.35)}
+#dStats td:last-child{text-align:right}
+#dErr{color:#f9a;min-height:1.3em;font-size:12px}
+.drow{display:flex;gap:6px}
+.drow .big{margin:0;flex:1}
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<canvas id="ui"></canvas>
+<div id="msg"></div>
+<div id="obj" hidden></div>
+<div id="help">Drag: select · Right-click: move / attack · Double-click: select design<br>WASD / edge: scroll · Q / E: rotate · Wheel: zoom<br>Ctrl+1-9: save group · 1-9: select group · H: base · G: army · P: pause · M: sound · Esc: menu</div>
+<div id="hud">
+  <div id="left" class="panel">
+    <div class="row"><span>POWER</span><span id="income"></span></div>
+    <div id="power">0</div>
+    <div id="pbar"><div></div></div>
+    <div id="counts"></div>
+    <div class="row3"><button id="bDesign" class="sb" type="button">Design</button><button id="bMenu" class="sb" type="button">Menu</button><button id="snd" class="sb" type="button">Sound: ON</button></div>
+  </div>
+  <div id="center" class="panel"><div id="selTitle"></div><div id="buttons"></div></div>
+  <canvas id="mini" width="154" height="154"></canvas>
+</div>
+<div id="designer" hidden><div class="dbox">
+  <h2>DESIGN UNIT</h2>
+  <div class="dgrid">
+    <div class="dparts">
+      <div class="dlabel">Body</div><div id="dBody" class="chips"></div>
+      <div class="dlabel">Propulsion</div><div id="dProp" class="chips"></div>
+      <div class="dlabel">Weapon / turret</div><div id="dWeap" class="chips"></div>
+    </div>
+    <div class="dprev"><img id="dImg" alt="Preview of the unit design"><div id="dName"></div><table id="dStats"></table><div id="dErr"></div>
+      <div class="drow"><button id="dSave" class="big" type="button">Save design</button><button id="dClose" class="big" type="button">Close</button></div></div>
+  </div>
+  <div class="dlabel">Your designs</div><div id="dList" class="chips"></div>
+</div></div>
+<div id="overlay"><div class="box" id="obox"></div></div>
+<!--THREE-->
+<script>
+<!--GAME-->
+</script>
+</body>
+</html>
