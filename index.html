@@ -17,14 +17,16 @@ html,body{margin:0;height:100%;overflow:hidden;background:#07060f;font-family:Ve
 #center{flex:1;overflow:hidden;min-width:0}
 #selTitle{font-weight:bold;margin-bottom:6px;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #buttons{display:flex;flex-wrap:wrap;gap:6px}
-.btn{width:104px;height:100px;background:radial-gradient(circle at 50% 35%,#4a44b0,#221e66);border:2px solid #7d72e8;border-radius:10px;color:#fff;font-size:11px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;position:relative;overflow:hidden;box-sizing:border-box;padding:2px}
+.btn{width:94px;height:96px;background:radial-gradient(circle at 50% 35%,#4a44b0,#221e66);border:2px solid #7d72e8;border-radius:10px;color:#fff;font-size:11px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;position:relative;overflow:hidden;box-sizing:border-box;padding:2px}
 .btn:hover{border-color:#ffe066}
-.btn img{width:84px;height:56px;pointer-events:none}
+.btn img{width:76px;height:50px;pointer-events:none}
 .btn.dis{opacity:.45}
 .btn .cost{color:#ffe066}
 .btn .q{position:absolute;top:3px;right:6px;color:#8f8;font-weight:bold;font-size:14px}
 .btn .prog{position:absolute;left:0;bottom:0;height:5px;width:0;background:#8f8}
 .btn.done{background:#1d5a2a;cursor:default}
+#snd{margin-top:auto;background:#3a34a0;border:1px solid #7d72e8;color:#fff;border-radius:6px;padding:4px;font:inherit;font-size:11px;cursor:pointer}
+#snd:hover{border-color:#ffe066}
 #mini{width:154px;height:154px;background:#000;border:2px solid #6a5fd0;border-radius:6px;cursor:crosshair;flex:none}
 #msg{position:absolute;top:14px;left:50%;transform:translateX(-50%);font-size:17px;font-weight:bold;text-shadow:0 0 5px #000,0 0 2px #000;pointer-events:none;text-align:center;color:#ffe9a0;z-index:4;width:90%}
 #help{position:absolute;top:8px;right:10px;font-size:11px;color:#ccd;text-shadow:0 0 3px #000;pointer-events:none;text-align:right;line-height:1.5;z-index:4}
@@ -40,7 +42,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#07060f;font-family:Ve
 <canvas id="view"></canvas>
 <canvas id="ui"></canvas>
 <div id="msg"></div>
-<div id="help">Drag: select · Right-click: move / attack · Double-click: select type<br>WASD / arrows / screen edge: scroll · Q / E or middle mouse: rotate · Wheel: zoom<br>H: base · G: select army · P: pause · Esc: cancel</div>
+<div id="help">Drag: select · Right-click: move / attack · Double-click: select type<br>WASD / arrows / screen edge: scroll · Q / E or middle mouse: rotate · Wheel: zoom<br>H: base · G: select army · P: pause · M: sound · Esc: cancel<br>Walls: drag a line · Shift-click: queue buildings</div>
 <div id="hud">
   <div id="left" class="panel">
     <div>POWER</div>
@@ -48,6 +50,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#07060f;font-family:Ve
     <div id="pbar"><div></div></div>
     <div id="income">+0/s</div>
     <div id="counts"></div>
+    <button id="snd" type="button">Sound: ON (M)</button>
   </div>
   <div id="center" class="panel"><div id="selTitle">Nothing selected</div><div id="buttons"></div></div>
   <canvas id="mini" width="154" height="154"></canvas>
@@ -90,23 +93,27 @@ const BDEF={
   factory:{name:'Factory',w:3,h:3,hp:1300,cost:250,time:20,desc:'Produces trucks and tanks.'},
   research:{name:'Research Facility',w:2,h:2,hp:750,cost:150,time:15,desc:'Researches upgrades.'},
   derrick:{name:'Oil Derrick',w:1,h:1,hp:450,cost:50,time:6,desc:'Build on an oil resource to generate power.'},
+  wall:{name:'Wall',w:1,h:1,hp:900,cost:20,time:3,desc:'Blocks enemy tanks. Click and drag to build a line of walls.'},
   tower:{name:'Guard Tower',w:1,h:1,hp:650,cost:125,time:10,range:230,dmg:13,rof:0.6,desc:'Machine gun tower for base defense.'}
 };
 const UDEF={
   truck:{name:'Construction Truck',hp:180,speed:78,cost:60,time:6,r:12,desc:'Builds structures and oil derricks.'},
   light:{name:'Light Tank',hp:230,speed:88,cost:100,time:7,range:190,dmg:9,rof:0.35,r:12,weapon:'mg',gunH:13,desc:'Fast tank with a machine gun.'},
-  heavy:{name:'Heavy Tank',hp:540,speed:52,cost:220,time:12,range:225,dmg:46,rof:1.8,r:16,weapon:'cannon',gunH:16,desc:'Slow, tough tank with a heavy cannon.'}
+  heavy:{name:'Heavy Tank',hp:540,speed:52,cost:220,time:12,range:225,dmg:46,rof:1.8,r:16,weapon:'cannon',gunH:16,desc:'Slow, tough tank with a heavy cannon.'},
+  rocket:{name:'Lancer Tank',hp:250,speed:74,cost:160,time:9,range:245,dmg:36,rof:1.6,r:13,weapon:'rocket',gunH:15,desc:'Fires anti-tank rockets. Great against tanks and buildings.'},
+  artillery:{name:'Mortar',hp:220,speed:56,cost:180,time:11,range:430,minRange:90,dmg:42,splash:55,rof:3.2,r:14,weapon:'mortar',gunH:18,desc:'Long-range artillery with splash damage. Cannot hit targets up close.'}
 };
 const RESEARCH=[
   {id:'mg',name:'Hardened MG Bullets',desc:'+30% machine gun damage',cost:150,time:20},
   {id:'cannon',name:'HEAT Cannon Shells',desc:'+30% cannon damage',cost:200,time:25},
   {id:'armor',name:'Composite Alloys',desc:'+35% armor for everything',cost:250,time:30},
   {id:'oil',name:'Improved Derricks',desc:'+50% oil output',cost:200,time:25},
+  {id:'rocket',name:'HE Rocket Warheads',desc:'+30% rocket and mortar damage',cost:200,time:25},
   {id:'engine',name:'Improved Engines',desc:'+20% unit speed',cost:150,time:20}
 ];
 const DIFF={easy:{inc:0.7,first:300,gap:170},normal:{inc:1,first:220,gap:140},hard:{inc:1.45,first:160,gap:110}};
 
-let rock,bldMap,oilMap,oils,hv,ents,byId,nextId,power,tech,sel,placing,projs,fx,decals,time,state='menu',paused=false,diff,ai,stats,terrainCv,miniBg,lastAlert=-99,msgT=0,roadPts=[],world=null,markers=[];
+let explored,visible,fogCur,fogTex=null,fogCv=null,rock,bldMap,oilMap,oils,hv,ents,byId,nextId,power,tech,sel,placing,projs,fx,decals,time,state='menu',paused=false,diff,ai,stats,terrainCv,miniBg,lastAlert=-99,msgT=0,roadPts=[],world=null,markers=[];
 const idx=(x,y)=>y*MW+x, inb=(x,y)=>x>=0&&y>=0&&x<MW&&y<MH, tileOf=v=>Math.floor(v/TILE);
 const R=Math.random, dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 const alive=e=>!!e&&e.hp>0&&byId.has(e.id);
@@ -232,18 +239,18 @@ function placeBuilding(type,team,tx,ty){
   for(const u of ents)if(u.kind==='u'&&bldMap[idx(tileOf(u.x),tileOf(u.y))]===b.id){const f=nearestFree(tileOf(u.x),tileOf(u.y),tileOf(u.x),tileOf(u.y));if(f){u.x=(f[0]+.5)*TILE;u.y=(f[1]+.5)*TILE}}
   return b;
 }
-function orderBuild(u,b){u.order={t:'build',id:b.id};u.path=[];u.repath=0}
+function orderBuild(u,b,queue){if(queue&&u.order&&u.order.t==='build'){(u.bq=u.bq||[]).push(b.id);return}u.bq=[];u.order={t:'build',id:b.id};u.path=[];u.repath=0}
 function orderMove(u,x,y,t='move'){u.order={t,x,y};u.chasing=false;setPath(u,x,y)}
 function speedOf(u){return UDEF[u.type].speed*(tech[u.team].engine?1.2:1)}
 
 function damage(t,d,team){
   if(!alive(t)||t.team===team)return;
   t.hp-=d*(tech[t.team].armor?1/1.35:1);
-  if(t.team===0&&time-lastAlert>15){lastAlert=time;msg(t.kind==='b'?'Our base is under attack!':'Our units are under attack!')}
+  if(t.team===0&&time-lastAlert>15){lastAlert=time;msg(t.kind==='b'?'Our base is under attack!':'Our units are under attack!');sfx('alert');say(t.kind==='b'?'Base under attack':'Units under attack')}
   if(t.hp<=0)kill(t);
 }
 function kill(t){
-  t.hp=0;byId.delete(t.id);
+  t.hp=0;byId.delete(t.id);sfx(t.kind==='b'?'bigboom':'boom',t.x,t.y);
   boom(t.x,t.y,t.kind==='b'?t.r*.9:t.r*1.3,t.kind==='b'?60:26);addDecal(t.x,t.y,t.kind==='b'?t.r:t.r*1.4);
   if(t.team===1)stats.kills++;else stats.lost++;
   if(t.kind==='b'){for(let y=t.ty;y<t.ty+t.h;y++)for(let x=t.tx;x<t.tx+t.w;x++)if(bldMap[idx(x,y)]===t.id)bldMap[idx(x,y)]=0;
@@ -259,24 +266,27 @@ function addDecal(x,y,r){const d={x,y,r:r+R()*6};decals.push(d);if(world){d.mesh
   if(decals.length>70){const o=decals.shift();if(o.mesh)world.remove(o.mesh)}}
 
 // ---------- COMBAT ----------
-function findTarget(e,range){let best=null,bs=1e9;
-  for(const o of ents){if(o.team===e.team||o.hp<=0)continue;const d=edgeDist(e,o);if(d>range)continue;const s=d+(o.kind==='b'?80:0)+(o.type==='truck'?30:0);if(s<bs){bs=s;best=o}}return best}
+function findTarget(e,range,minR=0){let best=null,bs=1e9;
+  for(const o of ents){if(o.team===e.team||o.hp<=0||(e.team===0&&!shown(o)))continue;const d=edgeDist(e,o);if(d>range||d<minR)continue;const s=d+(o.kind==='b'?(o.type==='wall'?220:80):0)+(o.type==='truck'?30:0);if(s<bs){bs=s;best=o}}return best}
+function dmgMult(team,w){const t=tech[team];return w==='mg'?(t.mg?1.3:1):w==='cannon'?(t.cannon?1.3:1):(t.rocket?1.3:1)}
 function fire(e,t){
   const w=e.kind==='b'?'mg':UDEF[e.type].weapon,def=e.kind==='b'?BDEF.tower:UDEF[e.type];
-  const dmg=def.dmg*(w==='mg'&&tech[e.team].mg?1.3:1)*(w==='cannon'&&tech[e.team].cannon?1.3:1);
-  const len=w==='cannon'?26:17,bx=e.x+Math.cos(e.turret)*len,by=e.y+Math.sin(e.turret)*len,gh=e.kind==='b'?24:def.gunH;
-  const p={x:bx,y:by,h:gh,tid:t.id,tx:t.x,ty:t.y,ox:(R()-.5)*t.r,oy:(R()-.5)*t.r,sp:w==='mg'?950:560,dmg,w,team:e.team};
-  if(world){p.mesh=new THREE.Mesh(w==='mg'?TRACER_GEO:SHELL_GEO,w==='mg'?TRACER_MAT:SHELL_MAT);world.add(p.mesh)}
+  const dmg=def.dmg*dmgMult(e.team,w);
+  const len=w==='cannon'?26:w==='mortar'?10:17,bx=e.x+Math.cos(e.turret)*len,by=e.y+Math.sin(e.turret)*len,gh=e.kind==='b'?24:def.gunH;
+  const p={x:bx,y:by,h:gh,tid:t.id,tx:t.x,ty:t.y,ox:(R()-.5)*t.r,oy:(R()-.5)*t.r,sp:{mg:950,cannon:560,rocket:620,mortar:330}[w],dmg,w,team:e.team};
+  if(w==='mortar'){p.tid=0;p.tx=t.x+(R()-.5)*30;p.ty=t.y+(R()-.5)*30;p.d0=Math.hypot(p.tx-bx,p.ty-by);p.splash=def.splash}
+  if(world){p.mesh=new THREE.Mesh(w==='mg'?TRACER_GEO:w==='rocket'?ROCKET_GEO:SHELL_GEO,w==='mg'?TRACER_MAT:w==='rocket'?ROCKET_MAT:SHELL_MAT);world.add(p.mesh)}
   projs.push(p);
-  fx.push({t:'flash',x:bx,y:by,h:gh,life:.07,max:.07,size:w==='cannon'?9:5});
+  fx.push({t:'flash',x:bx,y:by,h:gh,life:.07,max:.07,size:w==='cannon'||w==='mortar'?9:5});
+  sfx(w,e.x,e.y);
   e.cd=def.rof*(.9+R()*.2);
 }
 function combat(e,dt,want){
-  const def=e.kind==='b'?BDEF.tower:UDEF[e.type],range=def.range;
-  let ft=null;
-  if(want&&alive(want)&&edgeDist(e,want)<=range)ft=want;
-  else if(alive(e.auto)&&edgeDist(e,e.auto)<=range)ft=e.auto;
-  if(ft){const a=Math.atan2(ft.y-e.y,ft.x-e.x);e.turret=turnTo(e.turret,a,(e.type==='heavy'?2.5:5)*dt);if(e.cd<=0&&angDiff(e.turret,a)<.2)fire(e,ft)}
+  const def=e.kind==='b'?BDEF.tower:UDEF[e.type],range=def.range,mr=def.minRange||0;
+  let ft=null;const ok=o=>{const d=edgeDist(e,o);return d<=range&&d>=mr};
+  if(want&&alive(want)&&ok(want))ft=want;
+  else if(alive(e.auto)&&ok(e.auto))ft=e.auto;
+  if(ft){const a=Math.atan2(ft.y-e.y,ft.x-e.x);e.turret=turnTo(e.turret,a,(e.type==='heavy'||e.type==='artillery'?2.5:5)*dt);if(e.cd<=0&&angDiff(e.turret,a)<.2)fire(e,ft)}
   else if(e.kind==='u')e.turret=turnTo(e.turret,e.angle,2*dt);
 }
 
@@ -295,15 +305,15 @@ function updateUnit(u,dt){
   if(u.type==='truck'){
     const o=u.order;
     if(o&&o.t==='build'){const b=byId.get(o.id);
-      if(!b||b.built>=1){u.order=null;u.path=[];u.home={x:u.x,y:u.y};return}
+      if(!b||b.built>=1){while(u.bq&&u.bq.length){const n=byId.get(u.bq.shift());if(n&&n.built<1){u.order={t:'build',id:n.id};u.path=[];u.repath=0;return}}u.order=null;u.path=[];u.home={x:u.x,y:u.y};return}
       if(edgeDist(u,b)<=38){u.path=[];u.angle=turnTo(u.angle,Math.atan2(b.y-u.y,b.x-u.x),4*dt);const d=BDEF[b.type],st=dt/d.time;b.built=Math.min(1,b.built+st);b.hp=Math.min(b.maxHp,b.hp+b.maxHp*.9*st);u.turret+=dt*3;
         if(R()<dt*10)fx.push({t:'p',k:'fire',x:b.x+(R()-.5)*b.r,y:b.y+(R()-.5)*b.r,h:heightAt(b.x,b.y)+10+R()*30*b.built,vx:(R()-.5)*30,vy:(R()-.5)*30,vh:40,life:.4,max:.4});
-        if(b.built>=1){b.hp=Math.max(b.hp,b.maxHp*.6);if(b.team===0)msg(BDEF[b.type].name+' completed')}}
+        if(b.built>=1){b.hp=Math.max(b.hp,b.maxHp*.6);if(b.team===0){msg(BDEF[b.type].name+' completed');if(b.type!=='wall'){sfx('complete');say('Structure complete')}}}}
       else{u.repath-=dt;if(!u.path.length&&u.repath<=0){u.repath=1;setPath(u,b.x,b.y)}moveAlong(u,dt)}
       return}
     if(o&&moveAlong(u,dt)){u.order=null;u.home={x:u.x,y:u.y}}
     return}
-  if(u.scan<=0){u.scan=.25+R()*.1;u.auto=findTarget(u,UDEF[u.type].range+130)}
+  if(u.scan<=0){u.scan=.25+R()*.1;u.auto=findTarget(u,UDEF[u.type].range+130,UDEF[u.type].minRange||0)}
   const range=UDEF[u.type].range;let want=null,o=u.order;
   if(o&&o.t==='attack'){want=byId.get(o.id);if(!alive(want)){u.order=o=null;want=null;u.home={x:u.x,y:u.y}}}
   if(!want&&alive(u.auto)){
@@ -324,9 +334,9 @@ function updateBuilding(b,dt){
   if(b.built<1)return;
   if(b.type==='factory'&&b.queue.length){b.prog+=dt;const d=UDEF[b.queue[0]];
     if(b.prog>=d.time){const cnt=ents.filter(e=>e.kind==='u'&&e.team===b.team).length;
-      if(cnt<60){b.prog=0;spawnUnit(b,b.queue.shift())}else b.prog=d.time}}
+      if(cnt<60){b.prog=0;spawnUnit(b,b.queue.shift());if(b.team===0){sfx('ready');say('Unit ready')}}else b.prog=d.time}}
   if(b.type==='research'&&b.res){b.res.prog+=dt;const r=RESEARCH.find(x=>x.id===b.res.id);
-    if(b.res.prog>=r.time){tech[b.team][r.id]=true;if(b.team===0)msg('Research complete: '+r.name);b.res=null}}
+    if(b.res.prog>=r.time){tech[b.team][r.id]=true;if(b.team===0){msg('Research complete: '+r.name);sfx('complete');say('Research completed')}b.res=null}}
   if(b.type==='tower'){b.cd-=dt;b.scan-=dt;if(b.scan<=0){b.scan=.3;b.auto=findTarget(b,BDEF.tower.range)}combat(b,dt,null)}
 }
 function spawnUnit(b,type){
@@ -347,18 +357,30 @@ function update(dt){
     if(Math.abs(dx)<m&&Math.abs(dy)<m){const d=Math.hypot(dx,dy)||.01;if(d<m){const p=(m-d)/2*.5,nx=dx/d,ny=dy/d;a.x-=nx*p;a.y-=ny*p;b.x+=nx*p;b.y+=ny*p}}}
   for(const u of us){if(blocked(tileOf(u.x),tileOf(u.y))){u.x=u.sx;u.y=u.sy;
     if(blocked(tileOf(u.x),tileOf(u.y))){const f=nearestFree(tileOf(u.x),tileOf(u.y),tileOf(u.x),tileOf(u.y));if(f){u.x+=((f[0]+.5)*TILE-u.x)*Math.min(1,dt*6);u.y+=((f[1]+.5)*TILE-u.y)*Math.min(1,dt*6)}}}}
-  for(const p of projs){const t=byId.get(p.tid);if(t){p.tx=t.x+p.ox;p.ty=t.y+p.oy}
+  for(const p of projs){const t=p.tid?byId.get(p.tid):null;if(t){p.tx=t.x+p.ox;p.ty=t.y+p.oy}
     const dx=p.tx-p.x,dy=p.ty-p.y,d=Math.hypot(dx,dy),s=p.sp*dt;
-    if(d<=s){p.dead=true;if(p.mesh)world.remove(p.mesh);if(t)damage(t,p.dmg,p.team);
-      if(p.w==='cannon'){boom(p.tx,p.ty,8,10);if(R()<.3)addDecal(p.tx,p.ty,6)}
-      else for(let k=0;k<3;k++)fx.push({t:'p',k:'fire',x:p.tx,y:p.ty,h:heightAt(p.tx,p.ty)+10,vx:(R()-.5)*120,vy:(R()-.5)*120,vh:R()*80,life:.2,max:.2})}
+    if(p.w==='rocket'&&R()<.8)fx.push({t:'p',k:'smoke',x:p.x,y:p.y,h:p.hh||heightAt(p.x,p.y)+14,vx:0,vy:0,vh:8,life:.6,max:1.6});
+    if(d<=s){p.dead=true;if(p.mesh)world.remove(p.mesh);
+      if(p.w==='mortar'){for(const o of ents)if(o.team!==p.team&&o.hp>0&&edgeDist({x:p.tx,y:p.ty},o)<=p.splash)damage(o,p.dmg*(o.kind==='b'?1:.85),p.team);boom(p.tx,p.ty,16,22);addDecal(p.tx,p.ty,14);sfx('boom',p.tx,p.ty)}
+      else if(t)damage(t,p.dmg,p.team);
+      if(p.w==='cannon'||p.w==='rocket'){boom(p.tx,p.ty,8,10);sfx('hit',p.tx,p.ty);if(R()<.3)addDecal(p.tx,p.ty,6)}
+      else if(p.w==='mg')for(let k=0;k<3;k++)fx.push({t:'p',k:'fire',x:p.tx,y:p.ty,h:heightAt(p.tx,p.ty)+10,vx:(R()-.5)*120,vy:(R()-.5)*120,vh:R()*80,life:.2,max:.2})}
     else{p.x+=dx/d*s;p.y+=dy/d*s}}
   projs=projs.filter(p=>!p.dead);
   for(const f of fx){f.life-=dt;if(f.t==='p'){f.x+=f.vx*dt;f.y+=f.vy*dt;f.h+=f.vh*dt;f.vx*=.94;f.vy*=.94;if(f.k==='fire')f.vh-=150*dt}}
   fx=fx.filter(f=>f.life>0);
   if(ents.some(e=>e.hp<=0))ents=ents.filter(e=>e.hp>0);
   ai.t-=dt;if(ai.t<=0){ai.t=1;aiThink()}
+  fogT-=dt;if(fogT<=0){fogT=.2;updateFog()}
 }
+let fogT=0;
+function sightOf(e){return e.kind==='u'?(e.type==='artillery'?300:270):e.type==='hq'?380:e.type==='tower'?320:e.type==='wall'?90:210}
+function updateFog(){visible.fill(0);
+  for(const e of ents){if(e.team!==0||e.hp<=0)continue;const r=sightOf(e)/TILE,cx=e.x/TILE,cy=e.y/TILE;
+    for(let y=Math.max(0,Math.floor(cy-r));y<=Math.min(MH-1,Math.ceil(cy+r));y++)for(let x=Math.max(0,Math.floor(cx-r));x<=Math.min(MW-1,Math.ceil(cx+r));x++)if((x+.5-cx)**2+(y+.5-cy)**2<=r*r){visible[idx(x,y)]=1;explored[idx(x,y)]=1}}
+  for(const e of ents)if(e.team===1&&e.kind==='b'&&!e.seen){for(let y=e.ty;y<e.ty+e.h&&!e.seen;y++)for(let x=e.tx;x<e.tx+e.w;x++)if(visible[idx(x,y)]){e.seen=true;break}}}
+function shown(e){if(e.team===0)return true;if(e.kind==='b')return !!e.seen;const tx=tileOf(e.x),ty=tileOf(e.y);return inb(tx,ty)&&visible[idx(tx,ty)]===1}
+
 
 // ---------- ENEMY AI ----------
 function findSpot(type,cx,cy){
@@ -381,7 +403,7 @@ function aiThink(){
     if(b){orderBuild(t,b);unf.push(b)}}
   for(const f of facs){if(f.built<1||f.queue.length>=2)continue;
     const qt=facs.reduce((s,x)=>s+x.queue.filter(q=>q==='truck').length,0);
-    const type=trucks.length+qt<3?'truck':(R()<.3+.06*ai.wave?'heavy':'light');
+    const roll=R(),type=trucks.length+qt<3?'truck':roll<.1+.02*ai.wave?'artillery':roll<.26+.04*ai.wave?'rocket':roll<.46+.05*ai.wave?'heavy':'light';
     if(pw()>=UDEF[type].cost){power[T]-=UDEF[type].cost;f.queue.push(type)}}
   for(const r of mine.filter(e=>e.type==='research'&&e.built>=1&&!e.res)){const n=RESEARCH.find(x=>!tech[T][x.id]&&!mine.some(m=>m.res&&m.res.id===x.id));if(n&&pw()>=n.cost+150){power[T]-=n.cost;r.res={id:n.id,prog:0}}}
   const threat=ents.find(e=>e.team===0&&e.kind==='u'&&e.hp>0&&dist(e,hq)<600);
@@ -395,6 +417,40 @@ function aiThink(){
   for(const a of army)if(a.raid&&!a.order){const pb=ents.filter(e=>e.team===0&&e.hp>0).sort((x,y)=>dist(x,a)-dist(y,a))[0];if(pb)orderMove(a,pb.x,pb.y,'amove')}
   ai.time+=1;
 }
+
+// ---------- SOUND (synthesized with Web Audio) ----------
+const SFX={ctx:null,on:true,master:null,noise:null,last:{},lastSay:{}};
+function audioInit(){if(SFX.ctx)return;try{const C=window.AudioContext||window.webkitAudioContext;const c=SFX.ctx=new C();SFX.master=c.createGain();SFX.master.gain.value=SFX.on?.55:0;SFX.master.connect(c.destination);
+  const b=c.createBuffer(1,c.sampleRate*2,c.sampleRate),d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;SFX.noise=b;
+  const w=c.createBufferSource();w.buffer=b;w.loop=true;const f=c.createBiquadFilter();f.type='lowpass';f.frequency.value=320;const g=c.createGain();g.gain.value=.05;w.connect(f);f.connect(g);g.connect(SFX.master);w.start();
+  const lfo=c.createOscillator(),lg=c.createGain();lfo.frequency.value=.13;lg.gain.value=160;lfo.connect(lg);lg.connect(f.frequency);lfo.start()}catch(e){SFX.ctx=null}}
+function nz(t,dur,type,f0,f1,q,gain){const c=SFX.ctx,s=c.createBufferSource();s.buffer=SFX.noise;const f=c.createBiquadFilter();f.type=type;f.frequency.setValueAtTime(f0,t);f.frequency.exponentialRampToValueAtTime(f1,t+dur);f.Q.value=q;const g=c.createGain();g.gain.setValueAtTime(gain,t);g.gain.exponentialRampToValueAtTime(.001,t+dur);s.connect(f);f.connect(g);g.connect(SFX.master);s.start(t,Math.random()*1.5);s.stop(t+dur+.05)}
+function tn(t,dur,type,f0,f1,gain){const c=SFX.ctx,o=c.createOscillator();o.type=type;o.frequency.setValueAtTime(f0,t);if(f1!==f0)o.frequency.exponentialRampToValueAtTime(f1,t+dur);const g=c.createGain();g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(gain,t+.01);g.gain.exponentialRampToValueAtTime(.001,t+dur);o.connect(g);g.connect(SFX.master);o.start(t);o.stop(t+dur+.05)}
+const GAP={mg:.06,cannon:.08,rocket:.1,mortar:.12,hit:.05,boom:.05,bigboom:.1};
+function sfx(n,x,y){if(!SFX.ctx||!SFX.on)return;const c=SFX.ctx,t=c.currentTime;if(t-(SFX.last[n]||0)<(GAP[n]||.03))return;
+  let v=1;if(x!==undefined){v=Math.max(0,1-Math.hypot(x-cam.x,y-cam.y)/1700)*Math.min(1,700/cam.dist);if(v<.03)return}
+  SFX.last[n]=t;
+  switch(n){
+  case 'mg':nz(t,.07,'bandpass',2600,1400,.9,.5*v);tn(t,.03,'square',180,90,.08*v);break;
+  case 'cannon':nz(t,.45,'lowpass',1600,120,.8,.9*v);tn(t,.35,'sine',140,40,.6*v);break;
+  case 'rocket':nz(t,.5,'bandpass',700,3200,2,.45*v);tn(t,.3,'sawtooth',220,80,.05*v);break;
+  case 'mortar':tn(t,.25,'sine',110,45,.7*v);nz(t,.2,'lowpass',900,150,.7,.5*v);break;
+  case 'hit':nz(t,.25,'lowpass',1200,200,.7,.5*v);break;
+  case 'boom':nz(t,.9,'lowpass',1400,70,.7,v);tn(t,.6,'sine',90,30,.7*v);break;
+  case 'bigboom':nz(t,1.8,'lowpass',1800,50,.6,1.2*v);tn(t,1.2,'sine',70,25,.9*v);nz(t+.15,1.2,'lowpass',900,60,.6,.6*v);break;
+  case 'click':tn(t,.05,'square',900,700,.08);break;
+  case 'ack':tn(t,.06,'square',520,520,.07);tn(t+.07,.07,'square',780,780,.07);break;
+  case 'place':tn(t,.15,'triangle',220,90,.35);nz(t,.12,'lowpass',800,200,.7,.3);break;
+  case 'complete':[523,659,784].forEach((f,i)=>tn(t+i*.11,.18,'triangle',f,f,.25));break;
+  case 'ready':tn(t,.09,'square',660,660,.1);tn(t+.1,.12,'square',990,990,.1);break;
+  case 'deny':tn(t,.18,'square',200,150,.15);break;
+  case 'alert':for(let i=0;i<3;i++){tn(t+i*.3,.14,'square',880,880,.12);tn(t+i*.3+.15,.14,'square',660,660,.12)}break;
+  }}
+function say(text){if(!SFX.on||!window.speechSynthesis)return;const now=performance.now();if(now-(SFX.lastSay[text]||0)<6000)return;SFX.lastSay[text]=now;
+  try{const u=new SpeechSynthesisUtterance(text);u.lang='en-US';u.rate=1.05;u.pitch=.7;u.volume=.9;const v=speechSynthesis.getVoices().find(v=>/^en/i.test(v.lang));if(v)u.voice=v;speechSynthesis.speak(u)}catch(e){}}
+function toggleSound(){SFX.on=!SFX.on;audioInit();if(SFX.master)SFX.master.gain.value=SFX.on?.55:0;if(!SFX.on&&window.speechSynthesis)speechSynthesis.cancel();$('snd').textContent='Sound: '+(SFX.on?'ON':'OFF')+' (M)'}
+$('snd').addEventListener('click',toggleSound);
+function deny(t){msg(t,1.5);sfx('deny')}
 
 // ---------- 3D MODELS ----------
 const L=(c,o)=>new THREE.MeshLambertMaterial(Object.assign({color:c},o||{}));
@@ -420,6 +476,11 @@ function makeUnitModel(type,team){
     g.add(box(12,4,11,MAT.steelD,-6,13,0));
     tur.position.set(-6,15,0);tur.add(cyl(2.5,2.5,3,8,MAT.yellow,0,1,0));const arm=box(16,2.5,2.5,MAT.yellow,7,4,0);arm.rotation.z=.35;tur.add(arm);tur.add(box(2,6,2,MAT.steelD,14,4,0));
     return{g,tur}}
+  if(type==='artillery'){
+    for(const z of[-8,8]){const w=cyl(4.5,4.5,4,10,MAT.black,11,4.5,z);w.rotation.x=Math.PI/2;g.add(w);g.add(box(18,7,6,MAT.track,-5,3.5,z))}
+    g.add(box(30,6,14,T.main,1,9,0));g.add(box(8,6,12,T.light,11,14,0));g.add(box(1,4,10,MAT.glass,15.2,15,0));
+    tur.position.set(-5,13,0);tur.add(cyl(6,7,4,12,T.dark,0,0,0));const tube=cyl(2.6,2.6,18,10,MAT.steelD,4,8,0);tube.rotation.z=-.6;tur.add(tube);tur.add(box(6,3,8,MAT.steelD,0,3,0));
+    return{g,tur}}
   const big=type==='heavy',Lh=big?34:27,TW=big?9:7,off=big?11:8.5,nw=big?5:4,wr=big?3.5:2.8,th=big?4.5:3.5;
   for(const s of[-1,1]){g.add(box(Lh,big?9:7,TW,MAT.track,0,th,s*off));
     for(let i=0;i<nw;i++){const w=cyl(wr,wr,TW+.6,10,MAT.steelD,-Lh/2+4+i*(Lh-8)/(nw-1),th,s*off);w.rotation.x=Math.PI/2;g.add(w)}}
@@ -428,12 +489,14 @@ function makeUnitModel(type,team){
   g.add(box(4,2,4,MAT.steelD,-Lh/2+5,big?14.5:12,off*.4));
   tur.position.set(0,big?14:11.5,0);
   if(big){tur.add(box(17,7,14,T.dark,-1,0,0));tur.add(box(10,2,10,T.light,-2,4,0));tur.add(barrel(2,24,MAT.steelD,6,0));tur.add(box(5,4.5,4.5,MAT.black,30,0,0))}
+  else if(type==='rocket'){tur.add(cyl(5,6,4,10,T.dark,0,-1,0));tur.add(box(12,8,11,T.dark,2,4,0));tur.add(box(2,6,9,T.light,-4.5,4,0));
+    for(const[yy,zz]of[[2,-2.5],[2,2.5],[6,-2.5],[6,2.5]]){const t=cyl(1.4,1.4,1,8,MAT.black,8.3,yy,zz);t.rotation.z=Math.PI/2;tur.add(t)}}
   else{tur.add(cyl(6.5,7.5,5,12,T.dark,0,0,0));tur.add(cyl(3,3,2,10,T.light,-1,3,0));tur.add(barrel(1.1,16,MAT.black,4,0))}
   return{g,tur};
 }
 function pad(g,s){g.add(box(s-4,3,s-4,MAT.concrete,0,1.5,0));for(const[x,z,w,d]of[[0,-(s/2-4),s-6,2],[0,s/2-4,s-6,2],[-(s/2-4),0,2,s-6],[s/2-4,0,2,s-6]])g.add(box(w,1,d,MAT.yellow,x,3.3,z))}
 function makeBuildingModel(type,team){
-  const T=TMAT[team],g=new THREE.Group(),r={g};const s=BDEF[type].w*TILE;pad(g,s);
+  const T=TMAT[team],g=new THREE.Group(),r={g};const s=BDEF[type].w*TILE;if(type!=='wall')pad(g,s);
   if(type==='hq'){
     g.add(cyl(52,54,14,8,MAT.red,0,10,0));g.add(cyl(46,46,9,32,MAT.stripe,0,21,0));
     g.add(cyl(34,38,34,8,MAT.steel,0,42,0));g.add(cyl(40,36,6,8,MAT.steelL,0,62,0));
@@ -460,6 +523,8 @@ function makeBuildingModel(type,team){
     for(let i=1;i<4;i++)g.add(box(22-i*5,1,22-i*5,MAT.steelL,0,i*11,0));
     const arm=new THREE.Group();arm.position.set(0,48,0);arm.add(box(36,4,4,MAT.yellow,0,0,0));arm.add(box(6,10,6,MAT.steelD,-18,-2,0));arm.add(box(4,8,5,MAT.black,17,-4,0));g.add(arm);r.arm=arm;
     g.add(cyl(5,5,12,10,T.main,13,8,13));
+  }else if(type==='wall'){
+    g.add(box(40,24,40,MAT.concrete,0,12,0));g.add(box(42,4,42,MAT.steel,0,26,0));g.add(box(41,3,41,T.dark,0,6,0));
   }else if(type==='tower'){
     g.add(cyl(15,17,16,10,MAT.steelD,0,11,0));g.add(cyl(13,13,4,10,MAT.steel,0,21,0));
     const tur=new THREE.Group();tur.position.set(0,26,0);tur.add(sph(8,T.dark,0,-2,0,Math.PI/2));tur.add(barrel(1.3,20,MAT.black,4,1));tur.add(box(4,3,4,T.light,-3,4,0));g.add(tur);r.tur=tur;
@@ -472,6 +537,7 @@ const DECAL_GEO=new THREE.CircleGeometry(1,20);
 const DECAL_MAT=(()=>{const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d'),gr=g.createRadialGradient(32,32,0,32,32,32);gr.addColorStop(0,'rgba(15,8,4,.85)');gr.addColorStop(.6,'rgba(25,14,6,.5)');gr.addColorStop(1,'rgba(25,14,6,0)');g.fillStyle=gr;g.fillRect(0,0,64,64);
   return new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(c),transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2})})();
 const TRACER_GEO=new THREE.BoxGeometry(12,1.2,1.2),TRACER_MAT=new THREE.MeshBasicMaterial({color:0xfff2a0});
+const ROCKET_GEO=new THREE.BoxGeometry(9,2.2,2.2),ROCKET_MAT=new THREE.MeshBasicMaterial({color:0xffe0a0});
 const SHELL_GEO=new THREE.SphereGeometry(2.6,8,6),SHELL_MAT=new THREE.MeshBasicMaterial({color:0xffc060});
 const GLOW_TEX=(()=>{const c=document.createElement('canvas');c.width=c.height=32;const g=c.getContext('2d'),gr=g.createRadialGradient(16,16,0,16,16,16);gr.addColorStop(0,'rgba(255,255,255,1)');gr.addColorStop(1,'rgba(255,255,255,0)');g.fillStyle=gr;g.fillRect(0,0,32,32);return new THREE.CanvasTexture(c)})();
 const FLAME_MAT=new THREE.SpriteMaterial({color:0xff9a30,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,map:GLOW_TEX});
@@ -480,20 +546,25 @@ const BOOMS=[];for(let i=0;i<40;i++){const m=new THREE.Mesh(new THREE.SphereGeom
 function makePoints(n,additive,size){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(n*3),3));g.setAttribute('color',new THREE.BufferAttribute(new Float32Array(n*3),3));
   const p=new THREE.Points(g,new THREE.PointsMaterial({size,vertexColors:true,transparent:true,opacity:additive?1:.5,depthWrite:false,blending:additive?THREE.AdditiveBlending:THREE.NormalBlending,map:GLOW_TEX}));p.frustumCulled=false;scene.add(p);return p}
 const FIREP=makePoints(3000,true,9),SMOKEP=makePoints(3000,false,18);
-let ghost=null,ghostType=null;
+let ghost=null,ghostType=null,wallGhosts=[];
 const GHOST_OK=new THREE.MeshBasicMaterial({color:0x60ff60,transparent:true,opacity:.45,depthWrite:false}),GHOST_BAD=new THREE.MeshBasicMaterial({color:0xff4040,transparent:true,opacity:.45,depthWrite:false});
 
 function syncScene(rt){
+  if(fogTex){const d=fogTex.image.data;for(let ty=0;ty<MH;ty++)for(let tx=0;tx<MW;tx++){const i=idx(tx,ty),tg=visible[i]?0:explored[i]?150:238;fogCur[i]+=(tg-fogCur[i])*.15;const o=((MH-1-ty)*MW+tx)*4;d[o]=d[o+1]=d[o+2]=fogCur[i];d[o+3]=255}fogTex.needsUpdate=true}
   for(const e of ents){if(e.hp<=0)continue;let m=meshes.get(e.id);
     if(!m){m=e.kind==='u'?makeUnitModel(e.type,e.team):makeBuildingModel(e.type,e.team);world.add(m.g);meshes.set(e.id,m);if(e.kind==='b')m.g.position.set(e.x,heightAt(e.x,e.y),e.y)}
+    m.g.visible=shown(e);
     if(e.kind==='u'){m.g.position.set(e.x,heightAt(e.x,e.y),e.y);m.g.rotation.y=-e.angle;m.tur.rotation.y=-(e.turret-e.angle)}
     else{m.g.scale.y=e.built<1?.08+.92*e.built:1;
       if(m.spin)m.spin.rotation.y=rt*1.4;if(m.ring)m.ring.rotation.z=rt*(e.res?3:.8);if(m.arm)m.arm.rotation.z=Math.sin(rt*2.5+e.id)*.35;if(m.tur)m.tur.rotation.y=-e.turret;
       if(m.orb)m.orb.scale.setScalar(1+.25*Math.sin(rt*(e.res?9:2)));
       if(m.smoke&&e.queue.length&&e.built>=1&&!paused&&R()<.3)fx.push({t:'p',k:'smoke',x:e.x+m.smoke[0],y:e.y+m.smoke[2],h:heightAt(e.x,e.y)+m.smoke[1],vx:(R()-.5)*10,vy:(R()-.5)*10,vh:30,life:1.5,max:1.6})}}
   for(const[id,m]of meshes)if(!byId.has(id)){world.remove(m.g);meshes.delete(id)}
-  for(const o of oils){o.mesh.visible=!o.bid;o.flame.visible=!o.bid;const f=.7+.3*Math.sin(rt*9+o.x);o.flame.scale.set(14*f,22*f,1)}
-  for(const p of projs)if(p.mesh){const t=byId.get(p.tid),th=t?(t.kind==='b'?25:10):8,tot=Math.hypot(p.tx-p.x,p.ty-p.y);p.mesh.position.set(p.x,heightAt(p.x,p.y)+th+(p.h-th)*Math.min(1,tot/200),p.y);p.mesh.rotation.y=-Math.atan2(p.ty-p.y,p.tx-p.x)}
+  for(const o of oils){const ob=o.bid&&byId.get(o.bid),ov=!ob||!shown(ob);o.mesh.visible=ov;o.flame.visible=ov&&explored[idx(o.tx,o.ty)]===1;const f=.7+.3*Math.sin(rt*9+o.x);o.flame.scale.set(14*f,22*f,1)}
+  for(const p of projs)if(p.mesh){const tot=Math.hypot(p.tx-p.x,p.ty-p.y);let hh;
+    if(p.w==='mortar'){const k=1-tot/Math.max(1,p.d0);hh=heightAt(p.x,p.y)+p.h*(1-k)+Math.sin(k*Math.PI)*p.d0*.4}
+    else{const t=p.tid?byId.get(p.tid):null,th=t?(t.kind==='b'?25:10):8;hh=heightAt(p.x,p.y)+th+(p.h-th)*Math.min(1,tot/200)}
+    p.hh=hh;p.mesh.position.set(p.x,hh,p.y);p.mesh.rotation.y=-Math.atan2(p.ty-p.y,p.tx-p.x);const ptx=tileOf(p.x),pty=tileOf(p.y);p.mesh.visible=inb(ptx,pty)&&visible[idx(ptx,pty)]===1}
   let bi=0;
   for(const f of fx){if((f.t==='boom'||f.t==='flash')&&bi<BOOMS.length){const b=BOOMS[bi++],k=f.life/f.max;b.visible=true;b.position.set(f.x,f.t==='flash'?heightAt(f.x,f.y)+f.h:f.h,f.y);b.scale.setScalar(f.t==='boom'?f.size*(1.6-k):f.size);b.material.opacity=f.t==='boom'?k*.9:1;b.material.color.setRGB(1,.4+.5*k,.15*k)}}
   for(;bi<BOOMS.length;bi++)BOOMS[bi].visible=false;
@@ -503,7 +574,10 @@ function syncScene(rt){
     else if(f.k==='smoke'&&ns<3000){sp[ns*3]=f.x;sp[ns*3+1]=f.h;sp[ns*3+2]=f.y;const c=.18+.25*(1-k);sc[ns*3]=c;sc[ns*3+1]=c;sc[ns*3+2]=c;ns++}}
   FIREP.geometry.setDrawRange(0,nf);FIREP.geometry.attributes.position.needsUpdate=FIREP.geometry.attributes.color.needsUpdate=true;
   SMOKEP.geometry.setDrawRange(0,ns);SMOKEP.geometry.attributes.position.needsUpdate=SMOKEP.geometry.attributes.color.needsUpdate=true;
-  if(placing&&mouse.world){
+  const line=placing&&placing.type==='wall'&&placing.start&&mouse.world?wallLine(placing.start,[tileOf(mouse.world.x),tileOf(mouse.world.y)]):[];
+  while(wallGhosts.length<line.length){const g=makeBuildingModel('wall',0).g;g.traverse(o=>{if(o.isMesh)o.castShadow=false});scene.add(g);wallGhosts.push(g)}
+  wallGhosts.forEach((g,i)=>{if(i<line.length){const[tx,ty]=line[i],x=(tx+.5)*TILE,y=(ty+.5)*TILE,ok=canPlace('wall',tx,ty);g.visible=true;g.position.set(x,heightAt(x,y),y);g.traverse(o=>{if(o.isMesh)o.material=ok?GHOST_OK:GHOST_BAD})}else g.visible=false});
+  if(placing&&mouse.world&&!placing.start){
     if(ghostType!==placing.type){if(ghost)scene.remove(ghost);ghost=makeBuildingModel(placing.type,0).g;ghostType=placing.type;scene.add(ghost)}
     const d=BDEF[placing.type],tx=Math.round(mouse.world.x/TILE-d.w/2),ty=Math.round(mouse.world.y/TILE-d.h/2),ok=canPlace(placing.type,tx,ty)&&power[0]>=d.cost;
     const x=(tx+d.w/2)*TILE,y=(ty+d.h/2)*TILE;ghost.position.set(x,heightAt(x,y),y);
@@ -530,7 +604,7 @@ function brackets(x,y,r,c){uctx.strokeStyle=c;uctx.lineWidth=2;const k=r*.45;uct
   for(const[sx,sy]of[[-1,-1],[1,-1],[-1,1],[1,1]]){uctx.moveTo(x+sx*r,y+sy*(r-k));uctx.lineTo(x+sx*r,y+sy*r);uctx.lineTo(x+sx*(r-k),y+sy*r)}uctx.stroke()}
 function drawOverlay(rt){
   uctx.clearRect(0,0,W,VH);if(!world)return;
-  for(const e of ents){if(e.hp<=0)continue;const s=sel.includes(e);if(!s&&e.hp>=e.maxHp&&!(e.kind==='b'&&e.built<1))continue;
+  for(const e of ents){if(e.hp<=0||!shown(e))continue;const s=sel.includes(e);if(!s&&e.hp>=e.maxHp&&!(e.kind==='b'&&e.built<1))continue;
     const gh=heightAt(e.x,e.y),hh=e.kind==='b'?gh+20:gh+8,p=worldToScreen(e.x,hh,e.y);if(p.z>1||p.x<-50||p.x>W+50||p.y<-50||p.y>VH+50)continue;
     const ppu=pxPerUnit(e.x,hh,e.y),r=(e.kind==='b'?e.w*TILE*.5:e.r+6)*ppu;
     if(s)brackets(p.x,p.y,r,TEAM[e.team].css);
@@ -545,7 +619,9 @@ function drawOverlay(rt){
 function drawMinimap(){
   mctx.drawImage(miniBg,0,0);const k=154/WW;
   for(const o of oils)if(!o.bid){mctx.fillStyle='#000';mctx.fillRect(o.x*k-1.5,o.y*k-1.5,3,3)}
-  for(const e of ents){mctx.fillStyle=TEAM[e.team].mini;if(e.kind==='b')mctx.fillRect(e.tx*TILE*k,e.ty*TILE*k,Math.max(3,e.w*TILE*k),Math.max(3,e.h*TILE*k));else mctx.fillRect(e.x*k-1,e.y*k-1,2.5,2.5)}
+  for(const e of ents){if(!shown(e))continue;mctx.fillStyle=TEAM[e.team].mini;if(e.kind==='b')mctx.fillRect(e.tx*TILE*k,e.ty*TILE*k,Math.max(3,e.w*TILE*k),Math.max(3,e.h*TILE*k));else mctx.fillRect(e.x*k-1,e.y*k-1,2.5,2.5)}
+  if(!fogCv){fogCv=document.createElement('canvas');fogCv.width=MW;fogCv.height=MH}
+  {const fg=fogCv.getContext('2d'),im=fg.createImageData(MW,MH);for(let i=0;i<MW*MH;i++)im.data[i*4+3]=fogCur[i]*.92;fg.putImageData(im,0,0);mctx.imageSmoothingEnabled=true;mctx.drawImage(fogCv,0,0,154,154)}
   const c=[[0,0],[W,0],[W,VH],[0,VH]].map(p=>screenToWorld(p[0],p[1])||(()=>{ndc.set(p[0]/W*2-1,-(p[1]/VH)*2+1);ray.setFromCamera(ndc,camera);const d=ray.ray.direction,o=ray.ray.origin;return{x:o.x+d.x*2500,y:o.z+d.z*2500}})());
   mctx.strokeStyle='#fff';mctx.lineWidth=1;mctx.beginPath();c.forEach((p,i)=>i?mctx.lineTo(p.x*k,p.y*k):mctx.moveTo(p.x*k,p.y*k));mctx.closePath();mctx.stroke();
 }
@@ -556,7 +632,7 @@ function makeThumbs(){
   const tr=new THREE.WebGLRenderer({antialias:true,alpha:true,preserveDrawingBuffer:true});tr.setSize(168,112);tr.setPixelRatio(1);
   const ts=new THREE.Scene();ts.add(new THREE.HemisphereLight(0xffffff,0x444466,1.1));const dl=new THREE.DirectionalLight(0xffffff,1.6);dl.position.set(-1,2,1.5);ts.add(dl);
   const tc=new THREE.PerspectiveCamera(30,1.5,1,3000);
-  for(const t of['factory','research','derrick','tower','truck','light','heavy']){
+  for(const t of['factory','research','derrick','tower','wall','truck','light','heavy','rocket','artillery']){
     const m=BDEF[t]?makeBuildingModel(t,0).g:makeUnitModel(t,0).g;if(!BDEF[t])m.rotation.y=.5;ts.add(m);
     const b=new THREE.Box3().setFromObject(m),c=b.getCenter(new THREE.Vector3()),sz=b.getSize(new THREE.Vector3()).length();
     tc.position.set(c.x+sz*.9,c.y+sz*.75,c.z+sz*.9);tc.lookAt(c);tr.render(ts,tc);THUMB[t]=tr.domElement.toDataURL();ts.remove(m)}
@@ -575,19 +651,19 @@ function rebuildPanel(){
   const own=sel.filter(e=>e.team===0);
   if(!sel.length){$('selTitle').textContent='Nothing selected — drag a box around your units';return}
   if(own.some(e=>e.type==='truck')){
-    for(const t of['factory','research','derrick','tower']){const d=BDEF[t];
+    for(const t of['factory','research','derrick','tower','wall']){const d=BDEF[t];
       const b=mkBtn(d.name,d.cost,THUMB[t],d.desc,()=>{placing={type:t};if(t==='derrick')msg('Click on an oil resource to build a derrick',2)});
       refs.push(()=>b.classList.toggle('dis',power[0]<d.cost))}}
   if(own.length===1&&own[0].kind==='b'){const f=own[0];
-    if(f.built>=1&&f.type==='factory')for(const t of['truck','light','heavy']){const d=UDEF[t];
+    if(f.built>=1&&f.type==='factory')for(const t of['truck','light','heavy','rocket','artillery']){const d=UDEF[t];
       const b=mkBtn(d.name,d.cost,THUMB[t],d.desc+' Left-click: build. Right-click: cancel.',
-        ()=>{if(f.queue.length>=8)return msg('Queue is full',1.5);if(power[0]<d.cost)return msg('Not enough power!',1.5);power[0]-=d.cost;f.queue.push(t)},
+        ()=>{if(f.queue.length>=8)return msg('Queue is full',1.5);if(power[0]<d.cost)return deny('Not enough power!');power[0]-=d.cost;f.queue.push(t)},
         ()=>{const i=f.queue.lastIndexOf(t);if(i>=0){f.queue.splice(i,1);power[0]+=d.cost;if(i===0)f.prog=0}});
       refs.push(()=>{const n=f.queue.filter(q=>q===t).length;b.querySelector('.q').textContent=n?n:'';b.querySelector('.prog').style.width=f.queue[0]===t?(f.prog/d.time*100)+'%':'0';b.classList.toggle('dis',power[0]<d.cost)})}
     if(f.built>=1&&f.type==='research')for(const r of RESEARCH){
       const done=tech[0][r.id];
       const b=mkBtn(r.name,r.cost,researchIcon(done),r.desc,
-        ()=>{if(tech[0][r.id]||f.res)return;if(ents.some(e=>e.team===0&&e.res&&e.res.id===r.id))return msg('Already being researched',1.5);if(power[0]<r.cost)return msg('Not enough power!',1.5);power[0]-=r.cost;f.res={id:r.id,prog:0}},
+        ()=>{if(tech[0][r.id]||f.res)return;if(ents.some(e=>e.team===0&&e.res&&e.res.id===r.id))return msg('Already being researched',1.5);if(power[0]<r.cost)return deny('Not enough power!');power[0]-=r.cost;f.res={id:r.id,prog:0}},
         ()=>{if(f.res&&f.res.id===r.id){power[0]+=r.cost;f.res=null}});
       if(done)b.classList.add('done');
       refs.push(()=>{b.querySelector('.prog').style.width=f.res&&f.res.id===r.id?(f.res.prog/r.time*100)+'%':'0';b.classList.toggle('dis',!done&&(power[0]<r.cost||(!!f.res&&f.res.id!==r.id)))})}}
@@ -609,41 +685,48 @@ function updateHud(){
 // ---------- INPUT ----------
 const mouse={x:0,y:0,in:false,world:null},keys={};let drag=null,rot=null,lastClick={t:0,type:null};
 function pickAt(sx,sy){let best=null,bd=1e9;
-  for(const e of ents){if(e.kind!=='u'||e.hp<=0)continue;const h=heightAt(e.x,e.y)+8,p=worldToScreen(e.x,h,e.y),r=Math.max(10,(e.r+4)*pxPerUnit(e.x,h,e.y)),d=Math.hypot(p.x-sx,p.y-sy);if(d<r&&d<bd){bd=d;best=e}}
-  if(best)return best;const w=screenToWorld(sx,sy);if(!w)return null;const tx=tileOf(w.x),ty=tileOf(w.y);const id=inb(tx,ty)?bldMap[idx(tx,ty)]:0;return id?byId.get(id):null}
+  for(const e of ents){if(e.kind!=='u'||e.hp<=0||!shown(e))continue;const h=heightAt(e.x,e.y)+8,p=worldToScreen(e.x,h,e.y),r=Math.max(10,(e.r+4)*pxPerUnit(e.x,h,e.y)),d=Math.hypot(p.x-sx,p.y-sy);if(d<r&&d<bd){bd=d;best=e}}
+  if(best)return best;const w=screenToWorld(sx,sy);if(!w)return null;const tx=tileOf(w.x),ty=tileOf(w.y);const id=inb(tx,ty)?bldMap[idx(tx,ty)]:0;const b=id?byId.get(id):null;return b&&shown(b)?b:null}
 ui.addEventListener('contextmenu',e=>e.preventDefault());
 ui.addEventListener('mousedown',e=>{if(state!=='play')return;
   if(e.button===1){e.preventDefault();rot={x:e.clientX,y:e.clientY};return}
   const w=screenToWorld(e.clientX,e.clientY);
-  if(e.button===0){if(placing){if(w)tryPlace(w.x,w.y,e.shiftKey);return}drag={x0:e.clientX,y0:e.clientY,x1:e.clientX,y1:e.clientY,active:false,shift:e.shiftKey}}
+  audioInit();
+  if(e.button===0){if(placing){if(w){if(placing.type==='wall')placing.start=[tileOf(w.x),tileOf(w.y)];else tryPlace(w.x,w.y,e.shiftKey)}return}drag={x0:e.clientX,y0:e.clientY,x1:e.clientX,y1:e.clientY,active:false,shift:e.shiftKey}}
   else if(e.button===2){if(placing){placing=null;return}const t=pickAt(e.clientX,e.clientY);if(w||t)rightClick(w?w.x:t.x,w?w.y:t.y,t)}});
 ui.addEventListener('wheel',e=>{e.preventDefault();cam.dist*=e.deltaY>0?1.1:1/1.1},{passive:false});
 addEventListener('mousemove',e=>{mouse.x=e.clientX;mouse.y=e.clientY;mouse.in=true;
   if(rot){cam.yaw-=(e.clientX-rot.x)*.006;cam.pitch=Math.max(.55,Math.min(1.35,cam.pitch+(e.clientY-rot.y)*.004));rot={x:e.clientX,y:e.clientY}}
   if(drag){drag.x1=e.clientX;drag.y1=Math.min(e.clientY,VH);if(Math.abs(drag.x1-drag.x0)+Math.abs(drag.y1-drag.y0)>6)drag.active=true}});
 document.addEventListener('mouseleave',()=>mouse.in=false);
-addEventListener('mouseup',e=>{if(e.button===1){rot=null;return}if(!drag||e.button!==0)return;const d=drag;drag=null;
+addEventListener('mouseup',e=>{if(e.button===1){rot=null;return}if(e.button===0&&placing&&placing.start){finishWall(e.shiftKey);return}if(!drag||e.button!==0)return;const d=drag;drag=null;
   if(d.active){const x0=Math.min(d.x0,d.x1),x1=Math.max(d.x0,d.x1),y0=Math.min(d.y0,d.y1),y1=Math.max(d.y0,d.y1);
     const got=ents.filter(u=>{if(u.kind!=='u'||u.team!==0||u.hp<=0)return false;const p=worldToScreen(u.x,heightAt(u.x,u.y)+8,u.y);return p.x>=x0&&p.x<=x1&&p.y>=y0&&p.y<=y1});
-    sel=d.shift?[...new Set([...sel.filter(e=>e.kind==='u'&&e.team===0),...got])]:got;return}
+    sel=d.shift?[...new Set([...sel.filter(e=>e.kind==='u'&&e.team===0),...got])]:got;if(sel.length)sfx('click');return}
   const p=pickAt(d.x0,d.y0),now=performance.now();
   if(p&&p.kind==='u'&&p.team===0&&lastClick.type===p.type&&now-lastClick.t<350){sel=ents.filter(u=>{if(u.kind!=='u'||u.team!==0||u.type!==p.type)return false;const q=worldToScreen(u.x,heightAt(u.x,u.y),u.y);return q.x>0&&q.x<W&&q.y>0&&q.y<VH})}
   else if(p){if(d.shift&&p.kind==='u'&&p.team===0){sel=sel.filter(e=>e.kind==='u'&&e.team===0);sel=sel.includes(p)?sel.filter(e=>e!==p):[...sel,p]}else sel=[p]}
   else if(!d.shift)sel=[];
+  if(p)sfx('click');
   lastClick={t:now,type:p?p.type:null}});
+function wallLine(a,b){const out=[];let[x0,y0]=a;const[x1,y1]=b,dx=Math.abs(x1-x0),dy=-Math.abs(y1-y0),sx=x0<x1?1:-1,sy=y0<y1?1:-1;let err=dx+dy;for(let i=0;i<40;i++){out.push([x0,y0]);if(x0===x1&&y0===y1)break;const e2=2*err;if(e2>=dy){err+=dy;x0+=sx}if(e2<=dx){err+=dx;y0+=sy}}return out}
+function finishWall(keep){const w=mouse.world,line=w?wallLine(placing.start,[tileOf(w.x),tileOf(w.y)]):[placing.start];placing.start=null;
+  const trucks=sel.filter(e=>e.type==='truck'&&e.team===0);let n=0;
+  for(const[tx,ty]of line){if(power[0]<BDEF.wall.cost){deny('Not enough power!');break}if(!canPlace('wall',tx,ty))continue;const b=placeBuilding('wall',0,tx,ty);for(const t of trucks)orderBuild(t,b,n>0||keep);n++}
+  if(n)sfx('place');if(!keep)placing=null}
 function tryPlace(wx,wy,keep){const d=BDEF[placing.type],tx=Math.round(wx/TILE-d.w/2),ty=Math.round(wy/TILE-d.h/2);
-  if(power[0]<d.cost)return msg('Not enough power!',1.5);
+  if(power[0]<d.cost)return deny('Not enough power!');
   if(!canPlace(placing.type,tx,ty))return msg(placing.type==='derrick'?'Derricks must be built on free oil resources':'Cannot build there',1.5);
-  const b=placeBuilding(placing.type,0,tx,ty);for(const t of sel.filter(e=>e.type==='truck'&&e.team===0))orderBuild(t,b);if(!keep)placing=null}
+  const b=placeBuilding(placing.type,0,tx,ty);for(const t of sel.filter(e=>e.type==='truck'&&e.team===0))orderBuild(t,b,keep);sfx('place');if(!keep)placing=null}
 function rightClick(wx,wy,t){
   const own=sel.filter(e=>e.team===0);if(!own.length)return;
   if(own.length===1&&own[0].kind==='b'){if(own[0].type==='factory'){own[0].rally={x:wx,y:wy};markers.push({x:wx,y:wy,life:.5,c:'#8f8'})}return}
   const us=own.filter(e=>e.kind==='u');
-  if(t&&t.team===1){for(const u of us)if(u.type!=='truck'){u.order={t:'attack',id:t.id};u.repath=0;u.chasing=false;setPath(u,t.x,t.y)}else orderMove(u,wx,wy);markers.push({x:t.x,y:t.y,life:.5,c:'#f66'});return}
+  if(t&&t.team===1){for(const u of us)if(u.type!=='truck'){u.order={t:'attack',id:t.id};u.repath=0;u.chasing=false;setPath(u,t.x,t.y)}else orderMove(u,wx,wy);markers.push({x:t.x,y:t.y,life:.5,c:'#f66'});sfx('ack');return}
   if(t&&t.team===0&&t.kind==='b'&&t.built<1){let any=false;for(const u of us)if(u.type==='truck'){orderBuild(u,t);any=true}if(any)return}
   const n=us.length,cols=Math.ceil(Math.sqrt(n)),sp=34;
   us.sort((a,b)=>dist(a,{x:wx,y:wy})-dist(b,{x:wx,y:wy})).forEach((u,i)=>{const cx=i%cols-(cols-1)/2,cy=Math.floor(i/cols)-(Math.ceil(n/cols)-1)/2;orderMove(u,wx+cx*sp,wy+cy*sp)});
-  markers.push({x:wx,y:wy,life:.5,c:'#8f8'});
+  markers.push({x:wx,y:wy,life:.5,c:'#8f8'});sfx('ack');
 }
 function miniPos(e){const r=mini.getBoundingClientRect();return{x:(e.clientX-r.left)/r.width*WW,y:(e.clientY-r.top)/r.height*WH}}
 let miniDrag=false;
@@ -655,6 +738,7 @@ addEventListener('keydown',e=>{const k=e.key.toLowerCase();keys[k]=true;if(state
   if(k==='escape'){placing=null;sel=[]}
   if(k==='p')paused=!paused;
   if(k==='h'){const hq=ents.find(x=>x.team===0&&x.type==='hq');if(hq){cam.x=hq.x;cam.y=hq.y}}
+  if(k==='m')toggleSound();
   if(k==='g')sel=ents.filter(u=>u.kind==='u'&&u.team===0&&u.type!=='truck');
   if(k.startsWith('arrow')||k===' ')e.preventDefault()});
 addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
@@ -668,10 +752,14 @@ function scrollCam(dt){const s=cam.dist*1.1*dt;let mx=0,my=0;
 
 // ---------- GAME FLOW ----------
 function newGame(d){
+  audioInit();
   diff=d;ents=[];byId=new Map();nextId=1;power=[1000,1000];tech=[{},{}];sel=[];placing=null;projs=[];fx=[];decals=[];markers=[];time=0;paused=false;stats={kills:0,lost:0,built:0};
   if(world)scene.remove(world);meshes.clear();world=new THREE.Group();scene.add(world);
   genMap(Math.floor(Math.random()*1e9));bldMap=new Int32Array(MW*MH);
-  world.add(buildTerrainMesh());
+  const tm=buildTerrainMesh();world.add(tm);
+  explored=new Uint8Array(MW*MH);visible=new Uint8Array(MW*MH);fogCur=new Float32Array(MW*MH).fill(238);fogT=0;
+  fogTex=new THREE.DataTexture(new Uint8Array(MW*MH*4),MW,MH);fogTex.magFilter=fogTex.minFilter=THREE.LinearFilter;fogTex.needsUpdate=true;
+  const fm=new THREE.Mesh(tm.geometry,new THREE.MeshBasicMaterial({color:0x000000,transparent:true,alphaMap:fogTex,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-4,polygonOffsetUnits:-4}));fm.renderOrder=3;world.add(fm);
   for(const o of oils){const h=heightAt(o.x,o.y);o.mesh=mesh(geo('oilpool',()=>new THREE.CircleGeometry(15,20)),MAT.oil,o.x,h+.7,o.y);o.mesh.rotation.x=-Math.PI/2;o.mesh.castShadow=false;world.add(o.mesh);
     o.flame=new THREE.Sprite(FLAME_MAT);o.flame.position.set(o.x+4,h+12,o.y-2);world.add(o.flame)}
   ai={t:3,time:0,wave:0,size:6,next:DIFF[d].first};
@@ -682,6 +770,7 @@ function newGame(d){
     const sx=t?WW-12*TILE:12*TILE,sy=t?WH-49*TILE:49*TILE;
     makeUnit('truck',t,sx,sy);makeUnit('truck',t,sx+30,sy);makeUnit('light',t,sx+60,sy+40);makeUnit('light',t,sx+90,sy+40)}
   const hq=ents[0];cam.x=hq.x+80;cam.y=hq.y-60;cam.yaw=.7;cam.dist=760;cam.pitch=.92;
+  updateFog();
   state='play';$('overlay').style.display='none';panelKey='';
   msg('Build oil derricks with your trucks to get power. Destroy the enemy Command Center!',7);
 }
@@ -696,6 +785,9 @@ $('obox').innerHTML=`<h1>IRON FRONTIER</h1><p style="color:#aab">A 3D real-time 
 <li>Select a <b>Construction Truck</b> to build structures. Build <b>Oil Derricks</b> on burning oil resources to earn power.</li>
 <li>Select your <b>Factory</b> to produce trucks and tanks. Right-click the map to set a rally point.</li>
 <li>Build a <b>Research Facility</b> to unlock upgrades.</li>
+<li><b>Fog of war:</b> you only see what your units and buildings can see. Explore to find the enemy.</li>
+<li><b>Units:</b> Light Tank, Heavy Tank, Lancer (rockets) and Mortar (long-range artillery). Trucks can build <b>Walls</b>: drag a line.</li>
+<li><b>Sound:</b> press M to turn sound on or off.</li>
 <li><b>Goal:</b> destroy the enemy Command Center before they destroy yours!</li></ul>
 <p>Choose difficulty:</p>${menuButtons()}`;
 makeThumbs();
